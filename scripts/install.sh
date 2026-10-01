@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 : "${TV_HOST:?Set TV_HOST, for example root@TV_IP_ADDRESS}"
-APP_ID=org.webosbrew.earcvolume
+APP_ID=com.github.nikolay1243.earcvolume
 REMOTE_IPK=/tmp/earc-volume-overlay.ipk
 
 ssh_tv() {
@@ -14,11 +14,11 @@ scp_tv() {
 	else scp -o StrictHostKeyChecking=accept-new "$1" "$TV_HOST:$2"; fi
 }
 
-IPK=$(ls build/org.webosbrew.earcvolume_*_all.ipk 2>/dev/null | head -n 1 || true)
+IPK=$(ls build/com.github.nikolay1243.earcvolume_*_all.ipk 2>/dev/null | head -n 1 || true)
 if [ -z "$IPK" ]; then
 	[ -d node_modules ] || npm install
 	npm run package
-	IPK=$(ls build/org.webosbrew.earcvolume_*_all.ipk | head -n 1)
+	IPK=$(ls build/com.github.nikolay1243.earcvolume_*_all.ipk | head -n 1)
 fi
 
 echo "Copying app to $TV_HOST..."
@@ -34,7 +34,7 @@ fi
 
 echo "Enabling the bundled watcher..."
 ssh_tv 'set -e
-APP_ID=org.webosbrew.earcvolume
+APP_ID=com.github.nikolay1243.earcvolume
 APP_DIR=
 for BASE in /media/developer/apps/usr/palm/applications /media/cryptofs/apps/usr/palm/applications; do
 	if [ -f "$BASE/$APP_ID/runtime/watcher.js" ]; then APP_DIR="$BASE/$APP_ID"; break; fi

@@ -10,7 +10,7 @@ ARCHIVE="release/earc-volume-overlay-v$VERSION.tar.gz"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/app" "$STAGE/build" "$STAGE/runtime" "$STAGE/scripts"
-cp build/org.webosbrew.earcvolume_${VERSION}_all.ipk "$STAGE/build/"
+cp build/com.github.nikolay1243.earcvolume_${VERSION}_all.ipk "$STAGE/build/"
 cp app/appinfo.json app/index.html app/icon.png app/largeIcon.png "$STAGE/app/"
 cp runtime/watcher.js runtime/91-earc-volume-overlay "$STAGE/runtime/"
 cp scripts/package.sh scripts/install.sh scripts/uninstall.sh "$STAGE/scripts/"

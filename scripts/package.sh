@@ -7,7 +7,7 @@ VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' app/appinfo.json | head -n
 [ -n "$VERSION" ] || { echo "Could not read app version" >&2; exit 1; }
 
 mkdir -p build
-rm -f build/org.webosbrew.earcvolume_*_all.ipk
+rm -f build/com.github.nikolay1243.earcvolume_*_all.ipk
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT INT TERM
 cp -R app/. "$STAGE/"
@@ -15,7 +15,7 @@ mkdir -p "$STAGE/runtime"
 cp runtime/watcher.js runtime/91-earc-volume-overlay "$STAGE/runtime/"
 npx ares-package "$STAGE" --no-minify -o build
 
-IPK="build/org.webosbrew.earcvolume_${VERSION}_all.ipk"
+IPK="build/com.github.nikolay1243.earcvolume_${VERSION}_all.ipk"
 [ -f "$IPK" ] || { echo "Expected package was not created: $IPK" >&2; exit 1; }
 echo "Packaged $IPK"
 

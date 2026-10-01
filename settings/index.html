@@ -9,7 +9,7 @@
 <div id="overlay"><div id="value">0</div></div>
 <script>
 (function(){
-var APP_ID='org.webosbrew.earcvolume',SERVICE='luna://org.webosbrew.hbchannel.service/exec',HOOK='/var/lib/webosbrew/init.d/91-earc-volume-overlay',PIDFILE='/tmp/earc-volume-overlay.pid';
+var APP_ID='com.github.nikolay1243.earcvolume',SERVICE='luna://org.webosbrew.hbchannel.service/exec',HOOK='/var/lib/webosbrew/init.d/91-earc-volume-overlay',PIDFILE='/tmp/earc-volume-overlay.pid';
 var overlay=document.getElementById('overlay'),value=document.getElementById('value'),status=document.getElementById('status'),closeTimer=null,closeAnimationTimer=null;
 var findApp=['APP_DIR=','for BASE in /media/developer/apps/usr/palm/applications /media/cryptofs/apps/usr/palm/applications; do','  if [ -f "$BASE/'+APP_ID+'/runtime/watcher.js" ]; then APP_DIR="$BASE/'+APP_ID+'"; break; fi','done','[ -n "$APP_DIR" ] || { echo app-not-found; exit 1; }'].join('\n');
 var enableCommand=[findApp,'mkdir -p /var/lib/webosbrew/init.d','chmod 755 "$APP_DIR/runtime/91-earc-volume-overlay"','ln -sf "$APP_DIR/runtime/91-earc-volume-overlay" "'+HOOK+'"','if [ -f /var/lib/earc-volume-overlay/watcher.pid ]; then','  OLD=$(cat /var/lib/earc-volume-overlay/watcher.pid 2>/dev/null || true)','  [ -z "$OLD" ] || kill "$OLD" 2>/dev/null || true','fi','rm -rf /var/lib/earc-volume-overlay','"'+HOOK+'"','echo enabled'].join('\n');

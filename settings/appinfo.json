@@ -1,5 +1,5 @@
 {
-  "id": "org.webosbrew.earcvolume.settings",
+  "id": "com.github.nikolay1243.earcvolume.settings",
   "version": "1.2.0",
   "vendor": "eARC Volume Overlay contributors",
   "type": "web",

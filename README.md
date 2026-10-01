@@ -46,7 +46,7 @@ npm run package
 ```
 
 Two IPKs are written to `build/`: the overlay with its bundled watcher, and
-`org.webosbrew.earcvolume.settings`, which supplies the normal launcher icon and
+`com.github.nikolay1243.earcvolume.settings`, which supplies the normal launcher icon and
 setup screen. Install both. The settings app uses a normal card window because
 webOS closes overlay windows when the home screen opens.
 

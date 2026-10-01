@@ -4,7 +4,7 @@ var spawn = require('child_process').spawn;
 var execFile = require('child_process').execFile;
 var fs = require('fs');
 
-var APP_ID = 'org.webosbrew.earcvolume';
+var APP_ID = 'com.github.nikolay1243.earcvolume';
 var LOG = '/tmp/earc-volume-overlay.log';
 var last = null;
 var watcher = null;

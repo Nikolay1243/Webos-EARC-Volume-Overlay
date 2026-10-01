@@ -1,0 +1,27 @@
+name: Build IPK
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run package
+      - name: Create Homebrew manifest
+        run: sh scripts/make-manifest.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: earc-volume-overlay-ipk
+          path: |
+            build/*.ipk
+            release/*.manifest.json

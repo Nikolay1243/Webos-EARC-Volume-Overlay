@@ -1,0 +1,13 @@
+{
+  "id": "org.webosbrew.earcvolume.settings",
+  "version": "1.2.0",
+  "vendor": "eARC Volume Overlay contributors",
+  "type": "web",
+  "main": "index.html",
+  "title": "eARC Volume Overlay",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "visible": true,
+  "defaultWindowType": "card",
+  "resolution": "1920x1080"
+}

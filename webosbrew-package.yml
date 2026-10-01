@@ -1,0 +1,9 @@
+title: eARC Volume Overlay
+iconUri: https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/app/largeIcon.png
+manifestUrl: https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/release/org.webosbrew.earcvolume.manifest.json
+category: system
+pool: main
+description: |
+  Restores a numeric on-screen volume indicator when an LG webOS TV controls an
+  ARC/eARC soundbar or receiver. Includes an on-TV setup screen and starts
+  automatically after boot. Requires a rooted TV and Homebrew Channel.

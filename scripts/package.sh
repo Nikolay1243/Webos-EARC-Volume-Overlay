@@ -20,4 +20,7 @@ IPK="build/com.github.nikolay1243.earcvolume_${VERSION}_all.ipk"
 echo "Packaged $IPK"
 
 # The settings window must be a normal card so webOS exposes its launcher icon.
-npx ares-package settings --no-minify -o build
+mkdir -p "$STAGE/settings"
+cp -R settings/. "$STAGE/settings/"
+cp app/index.html app/root-exec.js "$STAGE/settings/"
+npx ares-package "$STAGE/settings" --no-minify -o build

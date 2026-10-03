@@ -1,5 +1,5 @@
 name: Publish release
-# Dependency lockfile validated before publishing.
+# Publish v1.2.1: setup diagnostics and paired SSH installation fixes.
 on:
   push:
     branches: [main]

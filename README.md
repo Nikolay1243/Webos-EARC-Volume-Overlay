@@ -78,8 +78,16 @@ TV_SSH_KEY="/path/to/your/private_key" \
 sh scripts/install.sh
 ```
 
-The installer packages the app if needed, installs the IPK, creates the same
+The installer packages the app if needed, installs both IPKs, creates the same
 startup-link used by the setup screen, and starts the bundled watcher.
+
+### Setup troubleshooting
+
+If Enable reports a missing overlay, install both packages, not just Settings.
+If it reports `Denied method call`, check Homebrew Channel's root status. Some
+firmware blocks access to its root execution service from other apps; the setup
+screen cannot bypass that restriction. Use the SSH installer above instead.
+The screen now reports concise errors rather than displaying the entire command.
 
 ## Uninstall
 

@@ -1,6 +1,6 @@
 {
   "id": "com.github.nikolay1243.earcvolume",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "vendor": "eARC Volume Overlay contributors",
   "type": "web",
   "main": "index.html",

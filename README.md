@@ -8,6 +8,10 @@ The overlay is intentionally minimal: a large number in the bottom-right corner.
 It updates while visible and disappears about two seconds after the final volume
 change.
 
+![eARC volume indicator showing 42 in the bottom-right corner](docs/overlay-preview.jpg)
+
+Preview rendered from the app's actual CSS at TV resolution against a neutral background.
+
 ## Features
 
 - Reads live volume and mute changes from `com.webos.service.audio`
@@ -28,6 +32,20 @@ Not every HDMI-CEC receiver reports an absolute volume. If webOS only receives
 volume-up/down acknowledgements, this project cannot infer the real number.
 
 ## Install from Homebrew Channel
+
+1. Open Homebrew Channel and go to **Settings → Repositories → Add repository**.
+2. Enter this exact URL (the GitHub repository page itself will not work):
+
+   ```text
+   https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/repo.json
+   ```
+
+3. Add and enable the repository, then return to the app browser and refresh it.
+4. Install **eARC Volume Overlay** and **eARC Volume Overlay Settings**.
+5. Open the settings app from your TV's app list and select **Enable**.
+
+You do not need to wait for this app to be accepted into the central repository.
+If using manual installation, download both IPKs from the [official releases](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/latest).
 
 Install both the overlay IPK and the companion settings IPK. Open
 **eARC Volume Overlay** (the settings app) and select **Enable**. Select
@@ -95,6 +113,13 @@ When the numeric ARC/eARC volume changes, it launches or relaunches the overlay
 app with the new value. The transparent web app updates the number in place and
 closes itself after its short timeout. Opening the app normally presents its
 setup screen instead.
+
+## Releases
+
+Installable IPKs and checksummed Homebrew manifests are published as GitHub Release
+assets. The repository's old `release/` downloads are retired. Maintainers can
+publish from Actions → Publish release → Run workflow; its write permission is
+limited to the publishing job and it does not run on pull requests.
 
 ## Development disclosure
 

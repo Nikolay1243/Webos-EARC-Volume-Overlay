@@ -1,0 +1,17 @@
+{
+  "paging": { "page": 1, "count": 2, "maxPage": 1, "itemsTotal": 2 },
+  "packages": [
+    {
+      "id": "com.github.nikolay1243.earcvolume",
+      "title": "eARC Volume Overlay",
+      "iconUri": "https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/app/largeIcon.png",
+      "manifestUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.2.0/com.github.nikolay1243.earcvolume.manifest.json"
+    },
+    {
+      "id": "com.github.nikolay1243.earcvolume.settings",
+      "title": "eARC Volume Overlay Settings",
+      "iconUri": "https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/settings/largeIcon.png",
+      "manifestUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.2.0/com.github.nikolay1243.earcvolume.settings.manifest.json"
+    }
+  ]
+}

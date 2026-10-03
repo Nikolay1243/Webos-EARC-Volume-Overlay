@@ -1,0 +1,31 @@
+name: Publish release
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-release.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run package
+      - run: node scripts/release-metadata.mjs
+      - name: Publish versioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('app/appinfo.json')).version")
+          if ! gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release create "v$VERSION" --target "$GITHUB_SHA" --title "eARC Volume Overlay v$VERSION" --notes "Install both IPKs, open eARC Volume Overlay settings, and select Enable. Requires a rooted LG webOS TV, Homebrew Channel, and an ARC/eARC device reporting absolute volume."
+          fi
+          gh release upload "v$VERSION" build/com.github.nikolay1243.earcvolume*.ipk build/release/*.manifest.json --clobber

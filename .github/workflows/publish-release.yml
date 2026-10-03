@@ -1,4 +1,5 @@
 name: Publish release
+# Dependency lockfile validated before publishing.
 on:
   push:
     branches: [main]

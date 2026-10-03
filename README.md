@@ -117,7 +117,7 @@ setup screen instead.
 ## Releases
 
 Installable IPKs and checksummed Homebrew manifests are published as GitHub Release
-assets. The repository's old `release/` downloads are retired. Maintainers can
+assets. The repository's old `release/` downloads are retired; only two compatibility manifests remain there for existing Homebrew listing URLs. Maintainers can
 publish from Actions → Publish release → Run workflow; its write permission is
 limited to the publishing job and it does not run on pull requests.
 

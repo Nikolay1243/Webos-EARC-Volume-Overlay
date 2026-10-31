@@ -1,15 +1,15 @@
 {
   "id": "com.github.nikolay1243.earcvolume.settings",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "type": "web",
   "title": "eARC Volume Overlay Settings",
   "appDescription": "Enable, disable and preview the companion overlay. Install both packages.",
   "iconUri": "https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/settings/largeIcon.png",
   "sourceUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay",
   "rootRequired": true,
-  "ipkUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.2.1/com.github.nikolay1243.earcvolume.settings_1.2.1_all.ipk",
+  "ipkUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.3.0/com.github.nikolay1243.earcvolume.settings_1.3.0_all.ipk",
   "ipkHash": {
-    "sha256": "628a85a223f26f07b0189dfcdf39cb4481feeb76a926d7d027b35bb23328c76c"
+    "sha256": "8982b64ddfdbf2847271d49e251860aab8632bc1c866a174125c3c8ef944539a"
   },
-  "ipkSize": 13996
+  "ipkSize": 14318
 }

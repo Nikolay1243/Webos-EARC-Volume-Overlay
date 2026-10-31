@@ -14,38 +14,6 @@ change.
 Preview rendered from the v1.4.0 app's HTML/CSS at 1920×1080 against a neutral
 background. The number shows the reported level; the bar animates between updates.
 
-## What's new
-
-### v1.4.0 — one app, one package
-
-- The setup menu and volume display are now a **single app and IPK**. The old
-  Settings companion is no longer required.
-- Open the launcher icon for **Enable**, **Disable**, and **Test overlay**.
-  Back closes the menu without stopping the enabled background watcher.
-- The volume display uses a passive floating window. Pointer clicks, arrow
-  keys, and OK continue working in the app underneath while it is visible.
-- Enabled state survives hard reboots, and the watcher resumes automatically
-  through Homebrew Channel's startup hook. Standby/wake was also tested.
-- The icon now includes **eArc Volume** text and uses fresh image filenames to
-  avoid the launcher displaying its cached, unlabeled icon.
-
-[Full v1.4.0 release notes](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/tag/v1.4.0)
-
-### v1.3.0 — soundbar-reported volume
-
-- Reads the actual ARC/eARC device-reported level through
-  `com.webos.service.eim/getArcVolume`, rather than relying on the TV's master
-  volume, which could drift during rapid changes.
-- Direct getter reads avoid missing low-volume subscription notifications.
-- Changes made with the soundbar's own remote and the Apple TV remote now
-  trigger the display on the tested setup, when reported over HDMI-CEC.
-- Adds a smooth volume bar while keeping the numeric value accurate. Updates
-  reuse the visible display without replaying its entrance animation.
-- Pressing up at 100 or down at 0 re-shows the display where the TV exposes CEC
-  volume-key activity. Routine diagnostic logging is disabled by default.
-
-[Full v1.3.0 release notes](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/tag/v1.3.0)
-
 ## Features
 
 - Reads soundbar-reported ARC volume from `com.webos.service.eim/getArcVolume`,

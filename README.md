@@ -14,9 +14,14 @@ Preview rendered from the app's actual CSS at TV resolution against a neutral ba
 
 ## Features
 
-- Reads live volume and mute changes from `com.webos.service.audio`
+- Reads soundbar-reported ARC volume from `com.webos.service.eim/getArcVolume`,
+  with sound output and mute changes from `com.webos.service.audio`
 - Activates only while the current sound output is `external_arc`
 - Updates the existing overlay instead of opening duplicate windows
+- Re-shows 0/100 on limit presses when the TV exposes volume commands in
+  `/var/log/cecmessages`
+- Shows a smooth volume bar beneath the accurate numeric level
+- Follows soundbar and Apple TV remote changes when reported over HDMI-CEC
 - Runs automatically after boot through the Homebrew Channel init directory
 - Includes a TV-friendly setup screen with Enable, Disable, and Test buttons
 - Keeps the startup hook inside the installed app, as recommended for Homebrew apps
@@ -30,6 +35,9 @@ Preview rendered from the app's actual CSS at TV resolution against a neutral ba
 
 Not every HDMI-CEC receiver reports an absolute volume. If webOS only receives
 volume-up/down acknowledgements, this project cannot infer the real number.
+On firmware without the ARC volume interface, the watcher falls back to webOS's
+master volume. That value can drift from the soundbar during held volume buttons;
+the log identifies this fallback when displaying changes.
 
 ## Install from Homebrew Channel
 
@@ -114,13 +122,32 @@ service starting
 watching external_arc at 12:false
 ```
 
+Routine volume and launch-timing diagnostics are disabled by default. For
+development, start the watcher with `EARC_VOLUME_DEBUG=1` to enable them.
+Startup, volume-source selection, and errors remain logged normally.
+
 ## How it works
 
-The root-side Node.js watcher subscribes to the webOS master-volume service.
+The root-side Node.js watcher subscribes to master-volume changes and reads the
+ARC volume getter directly. Some firmware omits low-volume ARC subscription
+notifications even while the getter is current. Reads run about every 150 ms
+during activity and every second while idle.
+It prefers the ARC volume reported by the soundbar over HDMI-CEC because webOS's
+master volume can drift during rapid changes. Master volume supplies output and
+mute state, and a fallback volume until an ARC value is available.
 When the numeric ARC/eARC volume changes, it launches or relaunches the overlay
 app with the new value. The transparent web app updates the number in place and
 closes itself after its short timeout. Opening the app normally presents its
 setup screen instead.
+
+### Volume steps
+
+The displayed number is the ARC/eARC device's reported level, not a count of
+remote presses. On the tested soundbar, reported levels step by one at low
+volumes and make larger jumps higher up (for example, 23 → 27 → 31 → 34).
+Other devices may use different scales. This is device-dependent, not a universal
+eARC rule. The bar animates between reported values while the number updates
+immediately.
 
 ## Releases
 

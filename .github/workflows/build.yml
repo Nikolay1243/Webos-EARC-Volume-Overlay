@@ -16,6 +16,7 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: npm test
       - run: npm run package
       - name: Create Homebrew manifest
         run: sh scripts/make-manifest.sh

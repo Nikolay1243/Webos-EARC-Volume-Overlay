@@ -1,15 +1,15 @@
 {
   "id": "com.github.nikolay1243.earcvolume",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "web",
   "title": "eARC Volume Overlay",
   "appDescription": "Shows the external eARC volume level.",
-  "iconUri": "https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/app/largeIcon.png",
+  "iconUri": "https://raw.githubusercontent.com/Nikolay1243/Webos-EARC-Volume-Overlay/main/app/largeIcon-labeled.png",
   "sourceUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay",
   "rootRequired": true,
-  "ipkUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.3.0/com.github.nikolay1243.earcvolume_1.3.0_all.ipk",
+  "ipkUrl": "https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/download/v1.4.0/com.github.nikolay1243.earcvolume_1.4.0_all.ipk",
   "ipkHash": {
-    "sha256": "da6ba98f20dc768ad19670c11fe34f39fbe6ef41e97c75db37bea8f290d8460a"
+    "sha256": "4778a9309cb96e8ee25bb4647476a6bd107372c3126561bed6427a042ad044b3"
   },
-  "ipkSize": 17806
+  "ipkSize": 20930
 }

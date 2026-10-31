@@ -9,10 +9,10 @@ the bottom-right corner.
 It updates while visible and disappears about two seconds after the final volume
 change.
 
-![eARC volume indicator showing 42 in the bottom-right corner](docs/overlay-preview.jpg)
+![v1.4.0 volume display showing 42 and its volume bar in the bottom-right corner](docs/overlay-preview-v1.4.0.jpg)
 
-Earlier numeric-only layout preview. Current releases also include the smooth
-volume bar described below.
+Preview rendered from the v1.4.0 app's HTML/CSS at 1920×1080 against a neutral
+background. The number shows the reported level; the bar animates between updates.
 
 ## What's new
 

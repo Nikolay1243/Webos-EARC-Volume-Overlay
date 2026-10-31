@@ -4,7 +4,8 @@ A small on-screen volume indicator for rooted LG webOS TVs connected to an
 eARC/ARC soundbar or receiver. It restores the numeric volume display that LG's
 built-in UI often omits for externally controlled audio devices.
 
-The overlay is intentionally minimal: a large number in the bottom-right corner.
+The overlay is intentionally minimal: a large number and a smooth volume bar in
+the bottom-right corner.
 It updates while visible and disappears about two seconds after the final volume
 change.
 
@@ -49,15 +50,20 @@ the log identifies this fallback when displaying changes.
    ```
 
 3. Add and enable the repository, then return to the app browser and refresh it.
-4. Install **eARC Volume Overlay** and **eARC Volume Overlay Settings**.
-5. Open the settings app from your TV's app list and select **Enable**.
+4. Install **eARC Volume Overlay**.
+5. Open **eARC Volume Overlay** from your TV's app list and select **Enable**.
 
 You do not need to wait for this app to be accepted into the central repository.
-If using manual installation, download both IPKs from the [official releases](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/latest).
+If using manual installation, download the single IPK from the [official releases](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/latest).
 
-Install both the overlay IPK and the companion settings IPK. Open
-**eARC Volume Overlay** (the settings app) and select **Enable**. Select
-**Test overlay** to preview the result. Use **Disable** before uninstalling.
+Install the single overlay IPK. Open **eARC Volume Overlay** from the launcher
+for its Enable, Disable, and Test menu. The same app switches to a transparent
+overlay when launched by its background watcher. Volume events leave an open
+settings menu in place. Use **Disable** before uninstalling.
+
+For upgrades from v1.3.0 or earlier, install the main app first. After checking
+its menu and overlay, remove the old **eARC Volume Overlay Settings** companion
+app without using its Disable button; it is no longer required.
 
 The setup screen asks Homebrew Channel's root service to create a startup-link
 to the watcher bundled inside the app. No SSH setup is required for normal use.
@@ -71,10 +77,18 @@ npm install
 npm run package
 ```
 
-Two IPKs are written to `build/`: the overlay with its bundled watcher, and
-`com.github.nikolay1243.earcvolume.settings`, which supplies the normal launcher icon and
-setup screen. Install both. The settings app uses a normal card window because
-webOS closes overlay windows when the home screen opens.
+One IPK is written to `build/`, containing the launcher menu, overlay, and
+background watcher. The launcher uses a card window; volume launches switch it
+to a passive floating window using `PalmSystem.setWindowProperty`. This uses a private webOS
+window API and needs testing across firmware versions.
+
+### Enabled state and power-off
+
+Enable creates a persistent startup-link in `/var/lib/webosbrew/init.d/` and
+starts the watcher. Closing the menu does not stop it. After a hard reboot,
+Homebrew Channel runs that hook to start the watcher again. Disable stops the
+watcher and removes the startup-link, so it stays disabled across reboots.
+Root and Homebrew startup support must remain available.
 
 ## Manual install on a rooted TV
 
@@ -86,12 +100,12 @@ TV_SSH_KEY="/path/to/your/private_key" \
 sh scripts/install.sh
 ```
 
-The installer packages the app if needed, installs both IPKs, creates the same
+The installer packages the app if needed, installs the IPK, creates the same
 startup-link used by the setup screen, and starts the bundled watcher.
 
 ### Setup troubleshooting
 
-If Enable reports a missing overlay, install both packages, not just Settings.
+If Enable reports a missing overlay, reinstall the main app package.
 If it reports `Denied method call`, check Homebrew Channel's root status. Some
 firmware blocks access to its root execution service from other apps; the setup
 screen cannot bypass that restriction. Use the SSH installer above instead.

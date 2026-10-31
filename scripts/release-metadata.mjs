@@ -5,15 +5,16 @@ const repository = 'Nikolay1243/Webos-EARC-Volume-Overlay';
 const version = JSON.parse(fs.readFileSync('app/appinfo.json')).version;
 const base = `https://github.com/${repository}/releases/download/v${version}`;
 fs.mkdirSync('build/release', { recursive: true });
-for (const directory of ['app', 'settings']) {
+fs.rmSync('build/release/com.github.nikolay1243.earcvolume.settings.manifest.json', { force: true });
+for (const directory of ['app']) {
   const app = JSON.parse(fs.readFileSync(`${directory}/appinfo.json`));
   const filename = `${app.id}_${app.version}_all.ipk`;
   const data = fs.readFileSync(`build/${filename}`);
   const manifest = {
     id: app.id, version: app.version, type: 'web',
-    title: directory === 'settings' ? 'eARC Volume Overlay Settings' : app.title,
-    appDescription: directory === 'settings' ? 'Enable, disable and preview the companion overlay. Install both packages.' : app.appDescription,
-    iconUri: `https://raw.githubusercontent.com/${repository}/main/${directory}/largeIcon.png`,
+    title: app.title,
+    appDescription: app.appDescription,
+    iconUri: `https://raw.githubusercontent.com/${repository}/main/${directory}/${app.largeIcon}`,
     sourceUrl: `https://github.com/${repository}`, rootRequired: true,
     ipkUrl: `${base}/${filename}`,
     ipkHash: { sha256: crypto.createHash('sha256').update(data).digest('hex') },

@@ -21,12 +21,6 @@ if [ -z "$IPK" ]; then
 	IPK=$(ls build/com.github.nikolay1243.earcvolume_*_all.ipk | head -n 1)
 fi
 
-SETTINGS_IPK=$(ls build/com.github.nikolay1243.earcvolume.settings_*_all.ipk 2>/dev/null | head -n 1 || true)
-if [ -z "$SETTINGS_IPK" ]; then
-	npm run package
-	SETTINGS_IPK=$(ls build/com.github.nikolay1243.earcvolume.settings_*_all.ipk | head -n 1)
-fi
-
 install_ipk() {
 IPK=$1
 echo "Copying app to $TV_HOST..."
@@ -45,7 +39,7 @@ grep -q '"state":"installed"' "$INSTALL_OUTPUT" || { echo "Package installation 
 INSTALL_OUTPUT=$(mktemp)
 trap 'rm -f "$INSTALL_OUTPUT"' EXIT INT TERM
 install_ipk "$IPK"
-install_ipk "$SETTINGS_IPK"
+
 
 echo "Enabling the bundled watcher..."
 ssh_tv 'set -e

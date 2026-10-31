@@ -1,5 +1,5 @@
 name: Publish release
-# Publish tested versioned IPKs and matching Homebrew manifests.
+# Publish v1.4.0: unified app, passive volume display, and labeled icon.
 on:
   push:
     branches: [main]

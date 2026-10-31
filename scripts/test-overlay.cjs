@@ -7,8 +7,10 @@ for (const id of ['overlay', 'volume-fill', 'value', 'status', 'enable', 'disabl
 }
 const listeners = {}, timers = new Map();
 let nextTimer = 0, activations = 0, closes = 0;
+const windowTypes = [], inputRegions = [], focusModes = [], keyMasks = [];
 const window = {
-  PalmSystem: { launchParams: { volume: 6 }, activate() { activations++; } },
+  earcRootExec(command, callback) { callback(null, 'enabled-running'); },
+  PalmSystem: { launchParams: { volume: 6 }, activate() { activations++; }, setWindowProperty(key, type) { if(key==='_WEBOS_WINDOW_TYPE')windowTypes.push(type); if(key==='needFocus')focusModes.push(type); }, setInputRegion(region) { inputRegions.push(JSON.parse(JSON.stringify(region))); }, setKeyMask(mask) { keyMasks.push(Array.from(mask)); } },
   setTimeout(fn, ms) { timers.set(++nextTimer, { fn, ms }); return nextTimer; },
   clearTimeout(id) { timers.delete(id); }, close() { closes++; }
 };
@@ -24,17 +26,16 @@ function fire(ms) {
     timers.delete(id); timer.fn();
   }
 }
-fire(20);
+fire(20); fire(60);
 assert.equal(elements.overlay.className, 'show');
 assert.equal(elements.value.textContent, '6');
 window.PalmSystem.launchParams = { volume: 7 };
 window.webOSRelaunch();
 assert.equal(elements.overlay.className, 'show', 'visible update must not hide the overlay');
 assert.equal(elements.value.textContent, '7');
-assert.equal(activations, 2, 'acknowledge each handled relaunch without hiding the window');
+assert.equal(activations, 1, 'updates to a visible overlay must not reacquire native keyboard focus');
 listeners.webOSRelaunch({ detail: { volume: 8 } });
 assert.equal(elements.value.textContent, '8');
-window.PalmSystem.launchParams = {};
 listeners.webOSRelaunch({});
 assert.equal(document.body.className, 'overlay-mode', 'empty event must not open setup');
 assert.equal([...timers.values()].filter(t => t.ms === 1850).length, 1);
@@ -43,8 +44,47 @@ assert.equal(elements.overlay.className, '');
 listeners.webOSRelaunch({ detail: { volume: 9 } });
 fire(220);
 assert.equal(closes, 0, 'an update during fade-out cancels close');
-fire(20);
+fire(20); fire(60);
 assert.equal(elements.overlay.className, 'show');
 fire(1850); fire(220);
 assert.equal(closes, 1);
+// The latest appearance also schedules a focus release.
+assert.equal(windowTypes[0], '_WEBOS_WINDOW_TYPE_FLOATING');
+assert.equal(focusModes.at(-1), 'false', 'overlay releases input focus after native window creation');
+assert.equal(inputRegions[0][0].width, 0, 'native input region must be a zero-size rectangle');
+assert.deepEqual(keyMasks.at(-1), ['KeyMaskDefault']);
+window.PalmSystem.launchParams = {};
+window.webOSRelaunch();
+assert.equal(document.body.className, 'setup-mode', 'opening the launcher shows settings');
+assert.equal(windowTypes.at(-1), '_WEBOS_WINDOW_TYPE_CARD');
+listeners.webOSRelaunch({ detail: { volume: 20 } });
+assert.equal(document.body.className, 'setup-mode', 'background updates do not dismiss settings');
+elements.test.onclick();
+assert.equal(windowTypes.at(-1), '_WEBOS_WINDOW_TYPE_FLOATING');
+fire(20); fire(1850); fire(220);
+assert.equal(document.body.className, 'setup-mode', 'preview returns to settings');
+assert.equal(windowTypes.at(-1), '_WEBOS_WINDOW_TYPE_CARD');
+// Opening settings during a live overlay cancels its pending window close.
+listeners.webOSRelaunch({ detail: { volume: 21 } });
+listeners.webOSRelaunch({ detail: {} });
+fire(1850); fire(220);
+assert.equal(document.body.className, 'setup-mode');
+assert.equal(closes, 1);
+assert.equal(focusModes.at(-1), 'true', 'settings restores input focus');
+assert.deepEqual(keyMasks.at(-1), ['KeyMaskDefault']);
+assert.equal(inputRegions.at(-1)[0].width, 1920);
+let prevented = false;
+listeners.keydown({keyCode:461, preventDefault() { prevented = true; }});
+assert.equal(prevented, true);
+assert.equal(closes, 2, 'Back closes settings instead of leaving hidden settings state');
+document.hidden = true;
+listeners.visibilitychange();
+assert.equal(closes, 3, 'system hiding settings also closes it');
+listeners.webOSRelaunch({detail:{volume:22}});
+assert.equal(document.body.className, 'overlay-mode', 'a watcher launch can recover a hidden settings instance');
+assert.equal(elements.value.textContent, '22');
+fire(60);
+assert.equal(focusModes.at(-1), 'false');
+assert.equal(inputRegions.at(-1)[0].width, 0);
+assert.deepEqual(keyMasks.at(-1), ['KeyMaskDefault']);
 console.log('Overlay lifecycle tests passed');

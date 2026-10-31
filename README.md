@@ -11,7 +11,40 @@ change.
 
 ![eARC volume indicator showing 42 in the bottom-right corner](docs/overlay-preview.jpg)
 
-Preview rendered from the app's actual CSS at TV resolution against a neutral background.
+Earlier numeric-only layout preview. Current releases also include the smooth
+volume bar described below.
+
+## What's new
+
+### v1.4.0 — one app, one package
+
+- The setup menu and volume display are now a **single app and IPK**. The old
+  Settings companion is no longer required.
+- Open the launcher icon for **Enable**, **Disable**, and **Test overlay**.
+  Back closes the menu without stopping the enabled background watcher.
+- The volume display uses a passive floating window. Pointer clicks, arrow
+  keys, and OK continue working in the app underneath while it is visible.
+- Enabled state survives hard reboots, and the watcher resumes automatically
+  through Homebrew Channel's startup hook. Standby/wake was also tested.
+- The icon now includes **eArc Volume** text and uses fresh image filenames to
+  avoid the launcher displaying its cached, unlabeled icon.
+
+[Full v1.4.0 release notes](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/tag/v1.4.0)
+
+### v1.3.0 — soundbar-reported volume
+
+- Reads the actual ARC/eARC device-reported level through
+  `com.webos.service.eim/getArcVolume`, rather than relying on the TV's master
+  volume, which could drift during rapid changes.
+- Direct getter reads avoid missing low-volume subscription notifications.
+- Changes made with the soundbar's own remote and the Apple TV remote now
+  trigger the display on the tested setup, when reported over HDMI-CEC.
+- Adds a smooth volume bar while keeping the numeric value accurate. Updates
+  reuse the visible display without replaying its entrance animation.
+- Pressing up at 100 or down at 0 re-shows the display where the TV exposes CEC
+  volume-key activity. Routine diagnostic logging is disabled by default.
+
+[Full v1.3.0 release notes](https://github.com/Nikolay1243/Webos-EARC-Volume-Overlay/releases/tag/v1.3.0)
 
 ## Features
 
@@ -24,6 +57,8 @@ Preview rendered from the app's actual CSS at TV resolution against a neutral ba
 - Shows a smooth volume bar beneath the accurate numeric level
 - Follows soundbar and Apple TV remote changes when reported over HDMI-CEC
 - Runs automatically after boot through the Homebrew Channel init directory
+- One launcher app and one IPK for setup and volume display
+- Keeps pointer and directional/OK controls available to the app underneath
 - Includes a TV-friendly setup screen with Enable, Disable, and Test buttons
 - Keeps the startup hook inside the installed app, as recommended for Homebrew apps
 
@@ -38,7 +73,7 @@ Not every HDMI-CEC receiver reports an absolute volume. If webOS only receives
 volume-up/down acknowledgements, this project cannot infer the real number.
 On firmware without the ARC volume interface, the watcher falls back to webOS's
 master volume. That value can drift from the soundbar during held volume buttons;
-the log identifies this fallback when displaying changes.
+it is a compatibility fallback, not a confirmed soundbar reading.
 
 ## Install from Homebrew Channel
 
@@ -61,9 +96,16 @@ for its Enable, Disable, and Test menu. The same app switches to a transparent
 overlay when launched by its background watcher. Volume events leave an open
 settings menu in place. Use **Disable** before uninstalling.
 
-For upgrades from v1.3.0 or earlier, install the main app first. After checking
-its menu and overlay, remove the old **eARC Volume Overlay Settings** companion
-app without using its Disable button; it is no longer required.
+### Upgrading from v1.3.0 or earlier
+
+1. Install/update the main **eARC Volume Overlay** app using the single v1.4.0
+   IPK or the refreshed Homebrew listing.
+2. Open it and select **Enable**, then check the menu and volume display.
+3. Uninstall the old **eARC Volume Overlay Settings** companion
+   (`com.github.nikolay1243.earcvolume.settings`). Do not select **Disable** in
+   that old app first: it controls the same watcher.
+
+New installations need only the main app. No companion package is required.
 
 The setup screen asks Homebrew Channel's root service to create a startup-link
 to the watcher bundled inside the app. No SSH setup is required for normal use.
@@ -79,16 +121,18 @@ npm run package
 
 One IPK is written to `build/`, containing the launcher menu, overlay, and
 background watcher. The launcher uses a card window; volume launches switch it
-to a passive floating window using `PalmSystem.setWindowProperty`. This uses a private webOS
-window API and needs testing across firmware versions.
+to a passive floating window using `PalmSystem.setWindowProperty`. Native
+focus and pointer-input settings keep the display non-interactive. These are
+private webOS APIs and need testing across firmware versions.
 
-### Enabled state and power-off
+## Enabled state and power-off
 
 Enable creates a persistent startup-link in `/var/lib/webosbrew/init.d/` and
 starts the watcher. Closing the menu does not stop it. After a hard reboot,
 Homebrew Channel runs that hook to start the watcher again. Disable stops the
 watcher and removes the startup-link, so it stays disabled across reboots.
-Root and Homebrew startup support must remain available.
+Root and Homebrew startup support must remain available. The watcher may start
+after a short Homebrew startup delay following a full reboot.
 
 ## Manual install on a rooted TV
 
@@ -132,8 +176,9 @@ tail -f /tmp/earc-volume-overlay.log
 A healthy startup looks similar to:
 
 ```text
-service starting
+service starting (ARC-reported volume preferred; master fallback until available)
 watching external_arc at 12:false
+using ARC-reported volume
 ```
 
 Routine volume and launch-timing diagnostics are disabled by default. For
@@ -163,10 +208,23 @@ Other devices may use different scales. This is device-dependent, not a universa
 eARC rule. The bar animates between reported values while the number updates
 immediately.
 
+## Tested behavior and compatibility
+
+On the maintainer's setup, the unified app was tested for Enable/Back, preview
+returning to settings, volume display over YouTube, pointer and arrow/OK controls
+while visible, hard reboot with automatic startup, standby/wake, mute, and sound
+output switching.
+
+Results can vary by firmware and audio device. The original reporter's Samsung
+HW-M550 has not yet been verified with these changes. Actual volume reporting
+requires the ARC getter and soundbar feedback; limit-press refreshes additionally
+require `/var/log/cecmessages`. The app does not send volume commands or assume
+that every rapid remote press was accepted by the soundbar.
+
 ## Releases
 
-Installable IPKs and checksummed Homebrew manifests are published as GitHub Release
-assets. The repository's old `release/` downloads are retired; only two compatibility manifests remain there for existing Homebrew listing URLs. Maintainers can
+The single installable IPK and its checksummed Homebrew manifest are published
+as GitHub Release assets. The repository's old `release/` downloads are retired; only two compatibility manifests remain there for existing Homebrew listing URLs. Maintainers can
 publish from Actions → Publish release → Run workflow; its write permission is
 limited to the publishing job and it does not run on pull requests.
 

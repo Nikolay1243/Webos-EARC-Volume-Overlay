@@ -27,7 +27,7 @@ background. The number shows the reported level; the bar animates between update
 - Runs automatically after boot through the Homebrew Channel init directory
 - One launcher app and one IPK for setup and volume display
 - Keeps pointer and directional/OK controls available to the app underneath
-- Includes a TV-friendly setup screen with Enable, Disable, and Test buttons
+- Includes a TV-friendly setup screen with Enable, Disable, and Test buttons, and an overlay size choice (Small, Medium, Large)
 - Keeps the startup hook inside the installed app, as recommended for Homebrew apps
 
 ## Requirements

@@ -2,13 +2,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const elements = {};
-for (const id of ['overlay', 'volume-fill', 'value', 'status', 'enable', 'disable', 'test']) {
-  elements[id] = { style: {}, className: '', textContent: '', focus() {} };
+let focused = null;
+for (const id of ['overlay', 'volume-fill', 'value', 'status', 'enable', 'disable', 'test', 'size-small', 'size-medium', 'size-large']) {
+  elements[id] = { id, style: {}, className: '', textContent: '', focus() { focused = id; document.activeElement = this; } };
 }
+const storage = new Map([['earc.overlaySize', 'medium']]);
 const listeners = {}, timers = new Map();
 let nextTimer = 0, activations = 0, closes = 0;
 const windowTypes = [], inputRegions = [], focusModes = [], keyMasks = [];
 const window = {
+  localStorage: { getItem: k => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)) },
   earcRootExec(command, callback) { callback(null, 'enabled-running'); },
   PalmSystem: { launchParams: { volume: 6 }, activate() { activations++; }, setWindowProperty(key, type) { if(key==='_WEBOS_WINDOW_TYPE')windowTypes.push(type); if(key==='needFocus')focusModes.push(type); }, setInputRegion(region) { inputRegions.push(JSON.parse(JSON.stringify(region))); }, setKeyMask(mask) { keyMasks.push(Array.from(mask)); } },
   setTimeout(fn, ms) { timers.set(++nextTimer, { fn, ms }); return nextTimer; },
@@ -29,6 +32,8 @@ function fire(ms) {
 fire(20); fire(60);
 assert.equal(elements.overlay.className, 'show');
 assert.equal(elements.value.textContent, '6');
+assert.equal(elements.overlay.style.fontSize, '15px', 'saved overlay size is applied on start');
+assert.equal(elements['size-medium'].className, 'selected');
 window.PalmSystem.launchParams = { volume: 7 };
 window.webOSRelaunch();
 assert.equal(elements.overlay.className, 'show', 'visible update must not hide the overlay');
@@ -95,3 +100,28 @@ assert.equal(focusModes.at(-1), 'false');
 assert.equal(inputRegions.at(-1)[0].width, 0);
 assert.deepEqual(keyMasks.at(-1), ['KeyMaskDefault']);
 console.log('Overlay lifecycle tests passed');
+
+// Overlay size setting: choosing a size saves it, applies it and previews it.
+window.PalmSystem.launchParams = {};
+window.webOSRelaunch();
+assert.equal(document.body.className, 'setup-mode');
+elements['size-small'].onclick();
+assert.equal(storage.get('earc.overlaySize'), 'small');
+assert.equal(elements.overlay.style.fontSize, '11px');
+assert.equal(elements['size-small'].className, 'selected');
+assert.equal(elements['size-medium'].className, '');
+assert.equal(document.body.className, 'overlay-mode', 'choosing a size previews the overlay');
+fire(20); fire(60); fire(1850); fire(220);
+assert.equal(document.body.className, 'setup-mode', 'preview returns to setup');
+fire(30);
+assert.equal(focused, 'size-small', 'focus returns to the chosen size');
+// Remote navigation between the two button rows.
+listeners.keydown({ keyCode: 38, preventDefault() {} });
+assert.equal(focused, 'enable');
+listeners.keydown({ keyCode: 39, preventDefault() {} });
+assert.equal(focused, 'disable');
+listeners.keydown({ keyCode: 40, preventDefault() {} });
+assert.equal(focused, 'size-small', 'down goes to the selected size');
+listeners.keydown({ keyCode: 39, preventDefault() {} });
+assert.equal(focused, 'size-medium');
+console.log('Overlay size tests passed');

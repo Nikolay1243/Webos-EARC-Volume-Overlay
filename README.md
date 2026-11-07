@@ -174,8 +174,11 @@ If the CEC log is missing, or two volume key presses get no soundbar report in
 it, the watcher falls back to polling webOS's stored copy of the soundbar's
 last reported volume (`getArcVolume`): every 150 ms around activity, every
 second otherwise, backing off when nothing is reported. TV master-volume
-changes then only trigger the overlay; their number is never shown. One report
-in the CEC log switches back to the fast path.
+changes then only trigger the overlay; their number is never shown. A soundbar
+report answering a key press switches back to the fast path. If no source
+confirms two key presses in a row (some soundbars, such as a Samsung HW-Q990B
+on an LG C2, never report their level), the overlay stays hidden for key
+presses instead of repeating an old number, until a real value arrives.
 
 If the native binary cannot run at all, the startup hook falls back to the
 previous Node.js watcher (`runtime/watcher.js`).

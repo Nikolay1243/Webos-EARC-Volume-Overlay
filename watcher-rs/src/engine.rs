@@ -12,9 +12,12 @@ const PENDING_REPEAT: Duration = Duration::from_millis(250);
 /// Unrequested reports right after switching to ARC (wake, input change)
 /// update the value silently instead of popping up the overlay.
 const QUIET_AFTER_SWITCH: Duration = Duration::from_secs(4);
-/// Key presses without any soundbar report in the log before the watcher
-/// falls back to reading webOS's stored copy of the soundbar's volume.
+/// Consecutive key presses without a soundbar report in the log before the
+/// watcher also reads webOS's stored copy of the soundbar's volume.
 const UNANSWERED_BEFORE_FALLBACK: u32 = 2;
+/// Consecutive key presses that no source confirmed before the overlay stops
+/// appearing for key presses, so it never keeps showing a stale number.
+const SILENT_BEFORE_HIDING: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Show {
@@ -34,9 +37,13 @@ pub struct Engine {
     quiet_until: Option<Instant>,
     /// Whether the TV's CEC log exists (None until known).
     log_present: Option<bool>,
-    /// A soundbar report has been read from the CEC log at least once.
-    reports_seen: bool,
+    /// Consecutive key presses the soundbar did not answer in the CEC log.
     unanswered: u32,
+    /// Consecutive key presses no source confirmed (no report, no polled change).
+    silent: u32,
+    /// Previous polled value; a poll counts as a change only against this,
+    /// never against a CEC report or seed of a different age.
+    last_polled: Option<u8>,
 }
 
 impl Engine {
@@ -59,8 +66,14 @@ impl Engine {
     /// is never used as a number.
     pub fn wants_polling(&self) -> bool {
         self.allowed()
-            && (self.log_present == Some(false)
-                || (!self.reports_seen && self.unanswered >= UNANSWERED_BEFORE_FALLBACK))
+            && (self.log_present == Some(false) || self.unanswered >= UNANSWERED_BEFORE_FALLBACK)
+    }
+
+    /// True when key presses keep going unconfirmed by every source (e.g. a
+    /// soundbar that never reports its volume). The overlay then stays hidden
+    /// for key presses until a real value arrives again.
+    pub fn starved(&self) -> bool {
+        self.silent >= SILENT_BEFORE_HIDING
     }
 
     /// A volume or mute key was pressed: show the last level at once, dimmed.
@@ -69,6 +82,9 @@ impl Engine {
             return None;
         }
         self.awaiting = Some(now);
+        if self.starved() {
+            return None;
+        }
         let volume = self.volume?;
         if self.last_pending_show.is_some_and(|t| now.duration_since(t) < PENDING_REPEAT) {
             return None;
@@ -81,8 +97,9 @@ impl Engine {
         match event {
             Event::Key(_) => self.press(now),
             Event::Report { volume, mute } => {
-                self.reports_seen = true;
                 self.unanswered = 0;
+                self.silent = 0;
+                self.last_polled = None;
                 let changed = self.volume.is_some_and(|v| v != volume) || (self.volume.is_some() && self.mute != mute);
                 self.volume = Some(volume);
                 self.mute = mute;
@@ -96,14 +113,19 @@ impl Engine {
             }
             Event::Polled(volume) => {
                 if !self.wants_polling() {
+                    self.last_polled = None;
                     return None;
                 }
-                let changed = self.volume.is_some_and(|v| v != volume);
-                self.volume = Some(volume);
+                let changed = self.last_polled.replace(volume).is_some_and(|v| v != volume);
+                if self.volume.is_none() {
+                    self.volume = Some(volume);
+                }
                 if !changed {
                     // A key press may still be on its way; tick() finalises it.
                     return None;
                 }
+                self.volume = Some(volume);
+                self.silent = 0;
                 let asked = self.awaiting.take().is_some_and(|t| now.duration_since(t) < REPLY_WAIT);
                 self.last_pending_show = None;
                 if self.quiet(now) && !asked {
@@ -157,10 +179,9 @@ impl Engine {
         }
         self.awaiting = None;
         self.last_pending_show = None;
-        if !self.reports_seen {
-            self.unanswered = self.unanswered.saturating_add(1);
-        }
-        if !self.allowed() {
+        self.unanswered = self.unanswered.saturating_add(1);
+        self.silent = self.silent.saturating_add(1);
+        if !self.allowed() || self.starved() {
             return None;
         }
         Some(Show { volume: self.volume?, mute: self.mute, pending: false })
@@ -285,6 +306,47 @@ mod tests {
     }
 
     #[test]
+    fn soundbar_that_never_answers_stops_showing_stale_numbers() {
+        // LG C2 + Samsung HW-Q990B: one report at power-on, then key presses
+        // that nothing ever answers.
+        let t0 = Instant::now();
+        let mut e = ready(t0, 22);
+        e.handle(Event::CecLog(true), t0);
+        e.handle(Event::Report { volume: 5, mute: false }, ms(t0, 100));
+        for n in 0..2 {
+            let t = ms(t0, 5000 + n * 3000);
+            assert!(e.handle(Event::Key(Key::VolumeUp), t).is_some());
+            e.tick(ms(t, 1500));
+        }
+        assert!(e.wants_polling(), "a power-on report must not disable the fallback");
+        assert!(e.starved());
+        let t = ms(t0, 20000);
+        assert_eq!(e.handle(Event::Key(Key::VolumeUp), t), None, "no stale number");
+        assert_eq!(e.tick(ms(t, 1500)), None);
+        // The first poll is only a baseline, even if it differs from the report.
+        assert_eq!(e.handle(Event::Polled(22), ms(t, 1800)), None);
+        assert!(e.starved());
+        // A real change brings the overlay back.
+        assert!(e.handle(Event::Polled(9), ms(t, 2000)).is_some());
+        assert!(!e.starved());
+        assert!(e.handle(Event::Key(Key::VolumeUp), ms(t, 5000)).is_some());
+    }
+
+    #[test]
+    fn single_missed_reply_does_not_hide_the_overlay() {
+        let t0 = Instant::now();
+        let mut e = ready(t0, 10);
+        e.handle(Event::CecLog(true), t0);
+        let t = ms(t0, 5000);
+        e.handle(Event::Key(Key::VolumeUp), t);
+        assert!(e.tick(ms(t, 1500)).is_some());
+        assert!(!e.starved());
+        e.handle(Event::Key(Key::VolumeUp), ms(t, 3000));
+        assert!(e.handle(Event::Report { volume: 11, mute: false }, ms(t, 3600)).is_some());
+        assert!(!e.wants_polling());
+    }
+
+    #[test]
     fn log_without_reports_falls_back_after_unanswered_keys() {
         let t0 = Instant::now();
         let mut e = ready(t0, 10);
@@ -301,17 +363,17 @@ mod tests {
     }
 
     #[test]
-    fn working_log_never_polls() {
+    fn answered_keys_never_poll() {
         let t0 = Instant::now();
         let mut e = ready(t0, 10);
         e.handle(Event::CecLog(true), t0);
-        e.handle(Event::Key(Key::VolumeUp), ms(t0, 5000));
-        e.handle(Event::Report { volume: 11, mute: false }, ms(t0, 5600));
-        for n in 0..5 {
+        for n in 0..5u64 {
             let t = ms(t0, 10000 + n * 3000);
             e.handle(Event::Key(Key::VolumeUp), t);
-            e.tick(ms(t, 1500));
+            e.handle(Event::Report { volume: 11 + n as u8, mute: false }, ms(t, 600));
+            assert_eq!(e.tick(ms(t, 1500)), None);
         }
         assert!(!e.wants_polling());
+        assert!(!e.starved());
     }
 }

@@ -114,6 +114,8 @@ fn seed(tx: Sender<Event>) {
 /// otherwise, and backs off when the soundbar reports nothing at all.
 struct Poller {
     enabled: Arc<AtomicBool>,
+    /// Polling has stopped producing anything new; check rarely.
+    starved: Arc<AtomicBool>,
     wake: Sender<()>,
 }
 
@@ -126,8 +128,10 @@ impl Poller {
 
     fn start(tx: Sender<Event>) -> Poller {
         let enabled = Arc::new(AtomicBool::new(false));
+        let starved = Arc::new(AtomicBool::new(false));
         let (wake, woken) = channel::<()>();
         let flag = enabled.clone();
+        let slow = starved.clone();
         std::thread::spawn(move || {
             let mut active_until = Instant::now();
             let mut failures = 0u32;
@@ -136,7 +140,7 @@ impl Poller {
                     Duration::from_secs(3600)
                 } else if Instant::now() < active_until {
                     Self::ACTIVE
-                } else if failures >= Self::FAILURES_BEFORE_BACKOFF {
+                } else if failures >= Self::FAILURES_BEFORE_BACKOFF || slow.load(Ordering::Relaxed) {
                     Self::BACKOFF
                 } else {
                     Self::IDLE
@@ -144,7 +148,13 @@ impl Poller {
                 match woken.recv_timeout(interval) {
                     Ok(()) => {
                         while woken.try_recv().is_ok() {}
-                        active_until = Instant::now() + Self::ACTIVE_FOR;
+                        // When nothing has changed for a while, one read per
+                        // burst of activity is enough to notice recovery.
+                        active_until = if slow.load(Ordering::Relaxed) {
+                            Instant::now()
+                        } else {
+                            Instant::now() + Self::ACTIVE_FOR
+                        };
                         failures = 0;
                     }
                     Err(RecvTimeoutError::Timeout) => {}
@@ -164,7 +174,7 @@ impl Poller {
                 }
             }
         });
-        Poller { enabled, wake }
+        Poller { enabled, starved, wake }
     }
 
     fn set_enabled(&self, on: bool) {
@@ -177,6 +187,16 @@ impl Poller {
             if on {
                 let _ = self.wake.send(());
             }
+        }
+    }
+
+    fn set_starved(&self, on: bool) {
+        if self.starved.swap(on, Ordering::Relaxed) != on {
+            log(if on {
+                "volume presses get no answer from the soundbar; overlay hidden until it reports a value"
+            } else {
+                "soundbar volume available again"
+            });
         }
     }
 
@@ -229,6 +249,7 @@ fn main() {
             Err(RecvTimeoutError::Disconnected) => break,
         };
         poller.set_enabled(engine.wants_polling());
+        poller.set_starved(engine.starved());
         if let Some(show) = result {
             debug(&format!("show {:?}", show));
             launcher.show(show);

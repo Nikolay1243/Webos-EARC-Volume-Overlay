@@ -9,11 +9,12 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::MetadataExt;
 use std::sync::mpsc::Sender;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{debug, log, Event, Key};
 
 const MAX_BACKLOG: u64 = 65536;
+const MISSING_GRACE: Duration = Duration::from_secs(5);
 
 /// Parses one log line into an event, if it is one we care about.
 pub fn parse_line(line: &str) -> Option<Event> {
@@ -114,13 +115,14 @@ pub fn follow(path: &str, tx: Sender<Event>) {
         log("inotify unavailable; polling the CEC log every 150 ms");
     }
 
-    let (mut position, mut inode) = match std::fs::metadata(path) {
-        Ok(m) => (m.len(), m.ino()),
-        Err(_) => {
-            log("CEC log not found yet; waiting for it to appear");
-            (0, 0)
-        }
+    let (mut position, mut inode, mut present) = match std::fs::metadata(path) {
+        Ok(m) => (m.len(), m.ino(), true),
+        Err(_) => (0, 0, false),
     };
+    if tx.send(Event::CecLog(present)).is_err() {
+        return;
+    }
+    let mut missing_since: Option<Instant> = None;
     let mut pending: Vec<u8> = Vec::new();
 
     loop {
@@ -128,7 +130,24 @@ pub fn follow(path: &str, tx: Sender<Event>) {
             Some(w) => w.wait(name, 1000),
             None => std::thread::sleep(Duration::from_millis(150)),
         }
-        let Ok(mut file) = File::open(path) else { continue };
+        let Ok(mut file) = File::open(path) else {
+            // Rotation removes the file briefly; only a lasting absence counts.
+            let since = *missing_since.get_or_insert_with(Instant::now);
+            if present && since.elapsed() >= MISSING_GRACE {
+                present = false;
+                if tx.send(Event::CecLog(false)).is_err() {
+                    return;
+                }
+            }
+            continue;
+        };
+        missing_since = None;
+        if !present {
+            present = true;
+            if tx.send(Event::CecLog(true)).is_err() {
+                return;
+            }
+        }
         let Ok(meta) = file.metadata() else { continue };
         if meta.ino() != inode || meta.len() < position {
             // Rotated or truncated: the new file holds only new lines.

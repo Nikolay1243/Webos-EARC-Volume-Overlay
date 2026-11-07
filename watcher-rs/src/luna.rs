@@ -58,6 +58,19 @@ pub fn string_field<'a>(json: &'a str, key: &str) -> Option<&'a str> {
     Some(&rest[..rest.find('"')?])
 }
 
+/// Extracts a boolean field.
+pub fn bool_field(json: &str, key: &str) -> Option<bool> {
+    let at = json.find(&format!("\"{}\"", key))? + key.len() + 2;
+    let rest = json[at..].trim_start().strip_prefix(':')?.trim_start();
+    if rest.starts_with("true") {
+        Some(true)
+    } else if rest.starts_with("false") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 /// Extracts a non-negative integer field.
 pub fn number_field(json: &str, key: &str) -> Option<u32> {
     let at = json.find(&format!("\"{}\"", key))? + key.len() + 2;
@@ -73,6 +86,7 @@ pub fn follow_sound_output(tx: Sender<Event>) {
         match under_pty(args, true).stdout(Stdio::piped()).spawn() {
             Ok(mut child) => {
                 let stdout = child.stdout.take().expect("piped stdout");
+                let mut previous: Option<(Option<u32>, bool)> = None;
                 for line in BufReader::new(stdout).lines() {
                     let Ok(line) = line else { break };
                     let line = line.trim();
@@ -83,11 +97,22 @@ pub fn follow_sound_output(tx: Sender<Event>) {
                         log(&format!("audio subscription rejected: {}", line));
                         continue;
                     }
+                    let mut events = Vec::new();
                     if let Some(output) = string_field(line, "soundOutput") {
-                        if tx.send(Event::Output(output == "external_arc")).is_err() {
-                            let _ = child.kill();
-                            return;
+                        events.push(Event::Output(output == "external_arc"));
+                    }
+                    // Master volume/mute changes are only an activity signal
+                    // for the polling fallback; the number itself is never shown.
+                    if let Some(mute) = bool_field(line, "muteStatus") {
+                        let current = (number_field(line, "volume"), mute);
+                        if previous.is_some_and(|p| p != current) {
+                            events.push(Event::Master { mute });
                         }
+                        previous = Some(current);
+                    }
+                    if events.into_iter().any(|e| tx.send(e).is_err()) {
+                        let _ = child.kill();
+                        return;
                     }
                 }
                 let _ = child.kill();
@@ -146,5 +171,7 @@ mod tests {
         assert_eq!(number_field(line, "volume"), Some(12));
         assert_eq!(number_field(r#"{ "Volume" : 27 }"#, "Volume"), Some(27));
         assert_eq!(string_field(line, "missing"), None);
+        assert_eq!(bool_field(line, "muteStatus"), Some(false));
+        assert_eq!(bool_field(r#"{"muteStatus" : true}"#, "muteStatus"), Some(true));
     }
 }

@@ -11,7 +11,8 @@ mod luna;
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -38,6 +39,14 @@ pub enum Event {
     Output(bool),
     /// Starting value read from webOS; never shown on its own.
     Seed(u8),
+    /// Whether the TV's CEC log exists.
+    CecLog(bool),
+    /// webOS's stored copy of the soundbar's last reported volume, polled
+    /// only when the CEC log cannot supply reports.
+    Polled(u8),
+    /// The TV's master volume or mute changed. Used only as an activity
+    /// trigger (and for mute) while polling; its number is never shown.
+    Master { mute: bool },
 }
 
 static DEBUG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -92,12 +101,90 @@ fn payload(show: &Show) -> String {
     )
 }
 
-fn seed(tx: std::sync::mpsc::Sender<Event>) {
+fn seed(tx: Sender<Event>) {
     std::thread::spawn(move || {
         if let Some(volume) = luna::arc_volume() {
             let _ = tx.send(Event::Seed(volume));
         }
     });
+}
+
+/// Fallback reader for TVs whose CEC log has no soundbar reports: polls
+/// webOS's stored ARC volume, every 150 ms around activity and every second
+/// otherwise, and backs off when the soundbar reports nothing at all.
+struct Poller {
+    enabled: Arc<AtomicBool>,
+    wake: Sender<()>,
+}
+
+impl Poller {
+    const ACTIVE: Duration = Duration::from_millis(150);
+    const ACTIVE_FOR: Duration = Duration::from_millis(2500);
+    const IDLE: Duration = Duration::from_secs(1);
+    const BACKOFF: Duration = Duration::from_secs(10);
+    const FAILURES_BEFORE_BACKOFF: u32 = 5;
+
+    fn start(tx: Sender<Event>) -> Poller {
+        let enabled = Arc::new(AtomicBool::new(false));
+        let (wake, woken) = channel::<()>();
+        let flag = enabled.clone();
+        std::thread::spawn(move || {
+            let mut active_until = Instant::now();
+            let mut failures = 0u32;
+            loop {
+                let interval = if !flag.load(Ordering::Relaxed) {
+                    Duration::from_secs(3600)
+                } else if Instant::now() < active_until {
+                    Self::ACTIVE
+                } else if failures >= Self::FAILURES_BEFORE_BACKOFF {
+                    Self::BACKOFF
+                } else {
+                    Self::IDLE
+                };
+                match woken.recv_timeout(interval) {
+                    Ok(()) => {
+                        while woken.try_recv().is_ok() {}
+                        active_until = Instant::now() + Self::ACTIVE_FOR;
+                        failures = 0;
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+                if !flag.load(Ordering::Relaxed) {
+                    continue;
+                }
+                match luna::arc_volume() {
+                    Some(volume) => {
+                        failures = 0;
+                        if tx.send(Event::Polled(volume)).is_err() {
+                            return;
+                        }
+                    }
+                    None => failures = failures.saturating_add(1),
+                }
+            }
+        });
+        Poller { enabled, wake }
+    }
+
+    fn set_enabled(&self, on: bool) {
+        if self.enabled.swap(on, Ordering::Relaxed) != on {
+            log(if on {
+                "no soundbar reports in the CEC log; reading stored ARC volume instead"
+            } else {
+                "soundbar reports available in the CEC log; stopped polling"
+            });
+            if on {
+                let _ = self.wake.send(());
+            }
+        }
+    }
+
+    fn activity(&self) {
+        if self.enabled.load(Ordering::Relaxed) {
+            let _ = self.wake.send(());
+        }
+    }
 }
 
 fn main() {
@@ -120,26 +207,28 @@ fn main() {
     seed(tx.clone());
 
     let launcher = Launcher::start();
+    let poller = Poller::start(tx.clone());
     let mut engine = Engine::default();
     loop {
         let wait = engine.next_deadline(Instant::now()).unwrap_or(Duration::from_secs(3600));
         let result = match rx.recv_timeout(wait) {
             Ok(event) => {
-                if let Event::Output(true) = event {
-                    if !engine.on_arc() {
+                match event {
+                    Event::Output(true) if !engine.on_arc() => {
                         log("sound output is ARC/eARC");
                         seed(tx.clone());
                     }
-                } else if let Event::Output(false) = event {
-                    if engine.on_arc() {
-                        log("sound output is not ARC/eARC");
-                    }
+                    Event::Output(false) if engine.on_arc() => log("sound output is not ARC/eARC"),
+                    Event::CecLog(present) => log(if present { "CEC log available" } else { "CEC log not found" }),
+                    Event::Key(_) | Event::Master { .. } => poller.activity(),
+                    _ => {}
                 }
                 engine.handle(event, Instant::now())
             }
             Err(RecvTimeoutError::Timeout) => engine.tick(Instant::now()),
             Err(RecvTimeoutError::Disconnected) => break,
         };
+        poller.set_enabled(engine.wants_polling());
         if let Some(show) = result {
             debug(&format!("show {:?}", show));
             launcher.show(show);

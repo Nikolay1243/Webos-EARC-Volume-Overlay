@@ -12,6 +12,9 @@ const PENDING_REPEAT: Duration = Duration::from_millis(250);
 /// Unrequested reports right after switching to ARC (wake, input change)
 /// update the value silently instead of popping up the overlay.
 const QUIET_AFTER_SWITCH: Duration = Duration::from_secs(4);
+/// Key presses without any soundbar report in the log before the watcher
+/// falls back to reading webOS's stored copy of the soundbar's volume.
+const UNANSWERED_BEFORE_FALLBACK: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Show {
@@ -29,6 +32,11 @@ pub struct Engine {
     awaiting: Option<Instant>,
     last_pending_show: Option<Instant>,
     quiet_until: Option<Instant>,
+    /// Whether the TV's CEC log exists (None until known).
+    log_present: Option<bool>,
+    /// A soundbar report has been read from the CEC log at least once.
+    reports_seen: bool,
+    unanswered: u32,
 }
 
 impl Engine {
@@ -46,21 +54,35 @@ impl Engine {
         self.quiet_until.is_some_and(|t| now < t)
     }
 
+    /// True when the CEC log cannot supply the soundbar's reports, so the
+    /// stored ARC volume must be polled instead. The TV's own master volume
+    /// is never used as a number.
+    pub fn wants_polling(&self) -> bool {
+        self.allowed()
+            && (self.log_present == Some(false)
+                || (!self.reports_seen && self.unanswered >= UNANSWERED_BEFORE_FALLBACK))
+    }
+
+    /// A volume or mute key was pressed: show the last level at once, dimmed.
+    fn press(&mut self, now: Instant) -> Option<Show> {
+        if !self.allowed() {
+            return None;
+        }
+        self.awaiting = Some(now);
+        let volume = self.volume?;
+        if self.last_pending_show.is_some_and(|t| now.duration_since(t) < PENDING_REPEAT) {
+            return None;
+        }
+        self.last_pending_show = Some(now);
+        Some(Show { volume, mute: self.mute, pending: true })
+    }
+
     pub fn handle(&mut self, event: Event, now: Instant) -> Option<Show> {
         match event {
-            Event::Key(_) => {
-                if !self.allowed() {
-                    return None;
-                }
-                self.awaiting = Some(now);
-                let volume = self.volume?;
-                if self.last_pending_show.is_some_and(|t| now.duration_since(t) < PENDING_REPEAT) {
-                    return None;
-                }
-                self.last_pending_show = Some(now);
-                Some(Show { volume, mute: self.mute, pending: true })
-            }
+            Event::Key(_) => self.press(now),
             Event::Report { volume, mute } => {
+                self.reports_seen = true;
+                self.unanswered = 0;
                 let changed = self.volume.is_some_and(|v| v != volume) || (self.volume.is_some() && self.mute != mute);
                 self.volume = Some(volume);
                 self.mute = mute;
@@ -71,6 +93,36 @@ impl Engine {
                 } else {
                     None
                 }
+            }
+            Event::Polled(volume) => {
+                if !self.wants_polling() {
+                    return None;
+                }
+                let changed = self.volume.is_some_and(|v| v != volume);
+                self.volume = Some(volume);
+                if !changed {
+                    // A key press may still be on its way; tick() finalises it.
+                    return None;
+                }
+                let asked = self.awaiting.take().is_some_and(|t| now.duration_since(t) < REPLY_WAIT);
+                self.last_pending_show = None;
+                if self.quiet(now) && !asked {
+                    return None;
+                }
+                Some(Show { volume, mute: self.mute, pending: false })
+            }
+            Event::Master { mute } => {
+                // Only a trigger while polling; with CEC reports the
+                // soundbar's own mute bit is authoritative.
+                if !self.wants_polling() {
+                    return None;
+                }
+                self.mute = mute;
+                self.press(now)
+            }
+            Event::CecLog(present) => {
+                self.log_present = Some(present);
+                None
             }
             Event::Output(arc) => {
                 let was = self.arc;
@@ -105,6 +157,9 @@ impl Engine {
         }
         self.awaiting = None;
         self.last_pending_show = None;
+        if !self.reports_seen {
+            self.unanswered = self.unanswered.saturating_add(1);
+        }
         if !self.allowed() {
             return None;
         }
@@ -204,5 +259,59 @@ mod tests {
         let mut e = Engine::default();
         assert_eq!(e.handle(Event::Key(Key::VolumeUp), t0), None);
         assert!(e.handle(Event::Report { volume: 9, mute: false }, ms(t0, 600)).is_some());
+    }
+
+    #[test]
+    fn missing_log_polls_stored_arc_volume() {
+        let t0 = Instant::now();
+        let mut e = ready(t0, 20);
+        assert!(!e.wants_polling());
+        e.handle(Event::CecLog(false), t0);
+        assert!(e.wants_polling());
+        // Master activity is only a trigger: last level, dimmed.
+        let t = ms(t0, 5000);
+        assert_eq!(e.handle(Event::Master { mute: false }, t), Some(Show { volume: 20, mute: false, pending: true }));
+        assert_eq!(e.handle(Event::Polled(20), ms(t, 150)), None);
+        assert_eq!(
+            e.handle(Event::Polled(22), ms(t, 300)),
+            Some(Show { volume: 22, mute: false, pending: false })
+        );
+        // Soundbar-remote changes picked up by the idle poll.
+        assert!(e.handle(Event::Polled(25), ms(t, 9000)).is_some());
+        e.handle(Event::CecLog(true), ms(t, 9500));
+        assert!(!e.wants_polling());
+        assert_eq!(e.handle(Event::Polled(30), ms(t, 9600)), None);
+        assert_eq!(e.handle(Event::Master { mute: true }, ms(t, 9700)), None);
+    }
+
+    #[test]
+    fn log_without_reports_falls_back_after_unanswered_keys() {
+        let t0 = Instant::now();
+        let mut e = ready(t0, 10);
+        e.handle(Event::CecLog(true), t0);
+        for n in 0..2 {
+            let t = ms(t0, 5000 + n * 3000);
+            e.handle(Event::Key(Key::VolumeUp), t);
+            e.tick(ms(t, 1500));
+        }
+        assert!(e.wants_polling());
+        // One report from the log switches back to the fast path for good.
+        e.handle(Event::Report { volume: 12, mute: false }, ms(t0, 20000));
+        assert!(!e.wants_polling());
+    }
+
+    #[test]
+    fn working_log_never_polls() {
+        let t0 = Instant::now();
+        let mut e = ready(t0, 10);
+        e.handle(Event::CecLog(true), t0);
+        e.handle(Event::Key(Key::VolumeUp), ms(t0, 5000));
+        e.handle(Event::Report { volume: 11, mute: false }, ms(t0, 5600));
+        for n in 0..5 {
+            let t = ms(t0, 10000 + n * 3000);
+            e.handle(Event::Key(Key::VolumeUp), t);
+            e.tick(ms(t, 1500));
+        }
+        assert!(!e.wants_polling());
     }
 }

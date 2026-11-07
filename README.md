@@ -170,8 +170,15 @@ The overlay app is launched or relaunched with each update. After fading out
 it stays resident and hidden, so later updates avoid a cold web-app start.
 Opening the app from the launcher presents its setup screen instead.
 
-If the native binary cannot run, the startup hook falls back to the previous
-Node.js watcher (`runtime/watcher.js`), which polls the ARC getter.
+If the CEC log is missing, or two volume key presses get no soundbar report in
+it, the watcher falls back to polling webOS's stored copy of the soundbar's
+last reported volume (`getArcVolume`): every 150 ms around activity, every
+second otherwise, backing off when nothing is reported. TV master-volume
+changes then only trigger the overlay; their number is never shown. One report
+in the CEC log switches back to the fast path.
+
+If the native binary cannot run at all, the startup hook falls back to the
+previous Node.js watcher (`runtime/watcher.js`).
 
 ### Volume steps
 

@@ -27,14 +27,14 @@ background. The number shows the reported level; the bar animates between update
 - Runs automatically after boot through the Homebrew Channel init directory
 - One launcher app and one IPK for setup and volume display
 - Keeps pointer and directional/OK controls available to the app underneath
-- Includes a TV-friendly setup screen with Enable, Disable, and Test buttons
+- Includes a TV-friendly setup screen with Enable, Disable, Test and Check compatibility buttons, and an overlay size choice (Small, Medium, Large)
 - Keeps the startup hook inside the installed app, as recommended for Homebrew apps
 
 ## Requirements
 
 - A rooted LG webOS TV
 - Homebrew Channel installed
-- `/usr/bin/node`, `/usr/bin/luna-send`, and `/usr/bin/script` on the TV
+- `/usr/bin/luna-send` and `/usr/bin/script` on the TV (`/usr/bin/node` only for the fallback watcher)
 - An ARC/eARC device that reports a numeric volume through webOS
 
 Not every HDMI-CEC receiver reports an absolute volume. If webOS only receives
@@ -80,7 +80,8 @@ to the watcher bundled inside the app. No SSH setup is required for normal use.
 
 ## Build
 
-Install Node.js 18 or newer on your computer, then run:
+Install Node.js 18 or newer, Rust (rustup) and `cargo-zigbuild`
+(`pip install ziglang cargo-zigbuild`) on your computer, then run:
 
 ```sh
 npm install
@@ -155,17 +156,32 @@ Startup, volume-source selection, and errors remain logged normally.
 
 ## How it works
 
-The root-side Node.js watcher subscribes to master-volume changes and reads the
-ARC volume getter directly. Some firmware omits low-volume ARC subscription
-notifications even while the getter is current. Reads run about every 150 ms
-during activity and every second while idle.
-It prefers the ARC volume reported by the soundbar over HDMI-CEC because webOS's
-master volume can drift during rapid changes. Master volume supplies output and
-mute state, and a fallback volume until an ARC value is available.
-When the numeric ARC/eARC volume changes, it launches or relaunches the overlay
-app with the new value. The transparent web app updates the number in place and
-closes itself after its short timeout. Opening the app normally presents its
-setup screen instead.
+A small native watcher (Rust, static ARM binary) follows the TV's own CEC log,
+`/var/log/cecmessages`, with inotify. It reads the soundbar's HDMI-CEC Report
+Audio Status messages (`RX507Axx`: volume in bits 0-6, mute in bit 7) and the
+TV's volume key presses to the soundbar (`TX0544xx`). Nothing is sent on the
+CEC bus. A key press shows the overlay at once with the last known level,
+dimmed; the soundbar's reply fills in the confirmed number. Changes made with
+the soundbar's own remote are shown as soon as it reports them.
+
+A single long-lived `luna-send` subscription tells the watcher whether sound
+goes to the ARC/eARC device, and the ARC getter is read once to seed the value.
+The overlay app is launched or relaunched with each update. After fading out
+it stays resident and hidden, so later updates avoid a cold web-app start.
+Opening the app from the launcher presents its setup screen instead.
+
+If the CEC log is missing, or two volume key presses get no soundbar report in
+it, the watcher falls back to polling webOS's stored copy of the soundbar's
+last reported volume (`getArcVolume`): every 150 ms around activity, every
+second otherwise, backing off when nothing is reported. TV master-volume
+changes then only trigger the overlay; their number is never shown. A soundbar
+report answering a key press switches back to the fast path. If no source
+confirms two key presses in a row (some soundbars, such as a Samsung HW-Q990B
+on an LG C2, never report their level), the overlay stays hidden for key
+presses instead of repeating an old number, until a real value arrives.
+
+If the native binary cannot run at all, the startup hook falls back to the
+previous Node.js watcher (`runtime/watcher.js`).
 
 ### Volume steps
 

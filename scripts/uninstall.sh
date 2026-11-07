@@ -12,7 +12,7 @@ ssh_tv 'for PIDFILE in /tmp/earc-volume-overlay.pid /var/lib/earc-volume-overlay
 		pid=$(cat "$PIDFILE" 2>/dev/null || true)
 		if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
 			cmd=$(tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true)
-			case "$cmd" in *watcher.js*) kill "$pid" 2>/dev/null || true;; esac
+			case "$cmd" in *earc-watcher*|*watcher.js*) kill "$pid" 2>/dev/null || true;; esac
 		fi
 	fi
 	done

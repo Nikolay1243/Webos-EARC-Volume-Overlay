@@ -4,3 +4,4 @@ release/
 .DS_Store
 *.log
 tv.env
+watcher-rs/target/

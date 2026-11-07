@@ -1,11 +1,11 @@
 {
   "name": "webos-earc-volume-overlay",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "private": true,
   "description": "An on-screen eARC volume indicator for rooted LG webOS TVs",
   "license": "MIT",
   "scripts": {
-    "test": "cargo test --manifest-path watcher-rs/Cargo.toml && node scripts/test-root-exec.cjs && node scripts/test-watcher.cjs && node scripts/test-overlay.cjs",
+    "test": "cargo test --manifest-path watcher-rs/Cargo.toml && node scripts/test-root-exec.cjs && node scripts/test-watcher.cjs && node scripts/test-overlay.cjs && node scripts/test-compat.cjs",
     "build:watcher": "sh scripts/build-watcher.sh",
     "package": "sh scripts/build-watcher.sh && sh scripts/package.sh",
     "release": "sh scripts/make-release.sh"

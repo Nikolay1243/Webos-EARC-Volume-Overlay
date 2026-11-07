@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const elements = {};
 let focused = null;
-for (const id of ['overlay', 'volume-fill', 'value', 'status', 'enable', 'disable', 'test', 'size-small', 'size-medium', 'size-large']) {
+for (const id of ['overlay', 'volume-fill', 'value', 'status', 'enable', 'disable', 'test', 'size-small', 'size-medium', 'size-large', 'check', 'result', 'result-title', 'result-detail']) {
   elements[id] = { id, style: {}, className: '', textContent: '', focus() { focused = id; document.activeElement = this; } };
 }
 const storage = new Map([['earc.overlaySize', 'medium']]);

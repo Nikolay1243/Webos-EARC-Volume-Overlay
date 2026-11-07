@@ -55,7 +55,7 @@ for PIDFILE in /tmp/earc-volume-overlay.pid /var/lib/earc-volume-overlay/watcher
 		pid=$(cat "$PIDFILE" 2>/dev/null || true)
 		case "$pid" in ""|*[!0-9]*) continue;; esac
 		cmd=$(tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true)
-		case "$cmd" in *earc-volume-overlay*watcher.js*|*com.github.nikolay1243.earcvolume*watcher.js*) kill "$pid" 2>/dev/null || true;; esac
+		case "$cmd" in *earc-volume-overlay*watcher.js*|*com.github.nikolay1243.earcvolume*watcher.js*|*com.github.nikolay1243.earcvolume*earc-watcher*) kill "$pid" 2>/dev/null || true;; esac
 	fi
 done
 rm -rf /var/lib/earc-volume-overlay

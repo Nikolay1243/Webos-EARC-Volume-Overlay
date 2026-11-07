@@ -1,0 +1,16 @@
+[package]
+name = "earc-watcher"
+version = "1.5.0"
+edition = "2021"
+license = "MIT"
+description = "Background watcher for the webOS eARC volume overlay"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

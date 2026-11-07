@@ -3,7 +3,7 @@
 <style>
 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{font-family:Arial,Helvetica,sans-serif;color:#fff;background:transparent}
 #setup{display:none;position:absolute;top:0;right:0;bottom:0;left:0;padding:110px 150px;background:radial-gradient(ellipse at 50% 35%,#25252a 0%,#111114 55%,#050506 100%)}body.setup-mode #setup{display:block}.panel{width:940px;margin:0 auto;text-align:center}.mark{width:116px;height:116px;margin:0 auto 30px;border-radius:26px;background:#171719 url('largeIcon-labeled.png') center/116px 116px no-repeat}h1{margin:0;font-size:54px;font-weight:300;letter-spacing:-.02em}.description{margin:20px auto 38px;max-width:760px;color:#b7b7bd;font-size:25px;line-height:1.45}#status{display:inline-block;min-width:270px;padding:12px 22px;margin-bottom:42px;border:1px solid #3b3b42;border-radius:999px;background:#19191d;color:#c8c8ce;font-size:22px}#status.enabled{border-color:#3f7255;color:#9fe0b6}#status.error{border-color:#8c4a4a;color:#ffaaaa}.buttons{display:flex;justify-content:center}button{min-width:215px;margin:0 10px;padding:20px 30px;border:2px solid #4a4a51;border-radius:17px;background:#202025;color:#eee;font-size:25px;outline:none}button:focus{border-color:#fff;background:#303037;transform:scale(1.05)}.note{margin-top:42px;color:#77777f;font-size:19px}
-#overlay{display:none;position:absolute;right:62px;bottom:62px;width:188px;transform:scale(.94);transform-origin:bottom right;opacity:0;padding:23px 28px;text-align:center;background:rgba(16,16,18,.88);border:1px solid rgba(255,255,255,.17);border-radius:22px;box-shadow:0 10px 35px rgba(0,0,0,.48);transition:opacity 150ms ease,transform 180ms ease}body.overlay-mode #overlay{display:block}#overlay.show{opacity:1;transform:scale(1)}#value{font-size:82px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums}
+#overlay{display:none;position:absolute;right:62px;bottom:62px;width:188px;transform:scale(.94);transform-origin:bottom right;opacity:0;padding:23px 28px;text-align:center;background:rgba(16,16,18,.88);border:1px solid rgba(255,255,255,.17);border-radius:22px;box-shadow:0 10px 35px rgba(0,0,0,.48);transition:opacity 150ms ease,transform 180ms ease}body.overlay-mode #overlay{display:block}#overlay.show{opacity:1;transform:scale(1)}#value{font-size:82px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums;transition:opacity 120ms ease}#value.pending{opacity:.45}
 #volume-track{height:4px;margin-top:18px;overflow:hidden;border-radius:2px;background:rgba(255,255,255,.18)}#volume-fill{width:100%;height:100%;border-radius:2px;background:#fff;transform:scaleX(0);transform-origin:left center;transition:transform 180ms ease-out}
 @media (prefers-reduced-motion:reduce){#volume-fill{transition:none}}
 </style></head><body>
@@ -15,8 +15,9 @@
 var APP_ID='com.github.nikolay1243.earcvolume',SERVICE='luna://org.webosbrew.hbchannel.service/exec',HOOK='/var/lib/webosbrew/init.d/91-earc-volume-overlay',PIDFILE='/tmp/earc-volume-overlay.pid';
 var overlay=document.getElementById('overlay'),value=document.getElementById('value'),volumeFill=document.getElementById('volume-fill'),status=document.getElementById('status'),closeTimer=null,closeAnimationTimer=null,showTimer=null,focusTimer=null;
 var findApp=['APP_DIR=','for BASE in /media/developer/apps/usr/palm/applications /media/cryptofs/apps/usr/palm/applications; do','  if [ -f "$BASE/'+APP_ID+'/runtime/watcher.js" ]; then APP_DIR="$BASE/'+APP_ID+'"; break; fi','done','[ -n "$APP_DIR" ] || { echo app-not-found; exit 1; }'].join('\n');
-var enableCommand=['set -e','[ "$(id -u)" = 0 ] || { echo root-required >&2; exit 1; }',findApp,'mkdir -p /var/lib/webosbrew/init.d','chmod 755 "$APP_DIR/runtime/91-earc-volume-overlay"','ln -sf "$APP_DIR/runtime/91-earc-volume-overlay" "'+HOOK+'"','if [ -f /var/lib/earc-volume-overlay/watcher.pid ]; then','  OLD=$(cat /var/lib/earc-volume-overlay/watcher.pid 2>/dev/null || true)','  [ -z "$OLD" ] || kill "$OLD" 2>/dev/null || true','fi','rm -rf /var/lib/earc-volume-overlay','"'+HOOK+'"','echo enabled'].join('\n');
-var disableCommand=['if [ -f "'+PIDFILE+'" ]; then','  PID=$(cat "'+PIDFILE+'" 2>/dev/null || true)','  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then','    CMD=$(tr "\\000" " " < "/proc/$PID/cmdline" 2>/dev/null || true)','    case "$CMD" in *watcher.js*) kill "$PID" 2>/dev/null || true;; esac','  fi','fi','rm -f "'+PIDFILE+'" "'+HOOK+'"','echo disabled'].join('\n');
+var stopWatcher=['if [ -f "'+PIDFILE+'" ]; then','  PID=$(cat "'+PIDFILE+'" 2>/dev/null || true)','  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then','    CMD=$(tr "\\000" " " < "/proc/$PID/cmdline" 2>/dev/null || true)','    case "$CMD" in *earc-watcher*|*watcher.js*) kill "$PID" 2>/dev/null || true;; esac','  fi','fi','rm -f "'+PIDFILE+'"'].join('\n');
+var enableCommand=['set -e','[ "$(id -u)" = 0 ] || { echo root-required >&2; exit 1; }',findApp,'mkdir -p /var/lib/webosbrew/init.d','chmod 755 "$APP_DIR/runtime/91-earc-volume-overlay"','ln -sf "$APP_DIR/runtime/91-earc-volume-overlay" "'+HOOK+'"','if [ -f /var/lib/earc-volume-overlay/watcher.pid ]; then','  OLD=$(cat /var/lib/earc-volume-overlay/watcher.pid 2>/dev/null || true)','  [ -z "$OLD" ] || kill "$OLD" 2>/dev/null || true','fi','rm -rf /var/lib/earc-volume-overlay',stopWatcher,'"'+HOOK+'"','echo enabled'].join('\n');
+var disableCommand=[stopWatcher,'rm -f "'+HOOK+'"','echo disabled'].join('\n');
 var statusCommand=['if [ -L "'+HOOK+'" ] || [ -f "'+HOOK+'" ]; then','  PID=$(cat "'+PIDFILE+'" 2>/dev/null || true)','  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then echo enabled-running; else echo enabled-stopped; fi','else echo disabled; fi'].join('\n');
 function paramsOf(input){var p=input;try{if(typeof p==='string')p=JSON.parse(p)}catch(e){p={}}if(!p||typeof p!=='object')p={};if(p.params&&typeof p.params==='object')p=p.params;return p}
 function hasVolume(p){return Object.prototype.hasOwnProperty.call(p,'volume')||Object.prototype.hasOwnProperty.call(p,'mute')}
@@ -42,7 +43,7 @@ if(!isFinite(n))n=0;n=Math.max(0,Math.min(100,Math.round(n)));
 clearOverlayTimers();
 if(!alreadyVisible)setWindowType('overlay');
 var displayed=(p.mute===true||p.muted===true)?0:n;
-value.textContent=String(displayed);volumeFill.style.transform='scaleX('+(displayed/100)+')';
+value.textContent=String(displayed);value.className=p.pending===true?'pending':'';volumeFill.style.transform='scaleX('+(displayed/100)+')';
 document.body.className='overlay-mode';
 if(!alreadyVisible){overlay.className='';showTimer=window.setTimeout(function(){overlay.className='show';showTimer=null},20)}
 // Activate only on appearance. Releasing focus must happen after the native
@@ -55,7 +56,10 @@ if(document.body.className!=='overlay-mode')return;
 if(window.PalmSystem&&PalmSystem.setWindowProperty)PalmSystem.setWindowProperty('needFocus','false');
 configureInput(true)
 },60);
-closeTimer=window.setTimeout(function(){overlay.className='';closeAnimationTimer=window.setTimeout(function(){if(preview)showSetup();else window.close()},220)},1850)
+// The window stays resident after fading out: a cold web-app launch takes
+// 1-2 s on these TVs, while relaunching a running app is near-instant.
+// While hidden it is transparent, passive and has a zero input region.
+closeTimer=window.setTimeout(function(){overlay.className='';closeAnimationTimer=window.setTimeout(function(){closeAnimationTimer=null;if(preview)showSetup();else configureInput(true)},220)},1850)
 }
 document.getElementById('enable').onclick=function(){setStatus('Enabling…');rootExec(enableCommand,function(error){if(error)setStatus(error.message,'error');else refreshStatus()})};
 document.getElementById('disable').onclick=function(){setStatus('Disabling…');rootExec(disableCommand,function(error){if(error)setStatus(error.message,'error');else refreshStatus()})};

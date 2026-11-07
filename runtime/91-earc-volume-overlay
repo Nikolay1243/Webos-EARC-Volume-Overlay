@@ -1,19 +1,29 @@
 #!/bin/sh
 SCRIPT=$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")
 APP_DIR=$(dirname "$(dirname "$SCRIPT")")
-WATCHER="$APP_DIR/runtime/watcher.js"
+RUNTIME="$APP_DIR/runtime"
 PIDFILE=/tmp/earc-volume-overlay.pid
-
-[ -f "$WATCHER" ] || exit 1
 
 if [ -f "$PIDFILE" ]; then
 	pid=$(cat "$PIDFILE" 2>/dev/null)
 	if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null \
-		&& tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "$WATCHER"; then
+		&& tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -qE "earc-watcher|watcher\.js"; then
 		exit 0
 	fi
 fi
 
-/usr/bin/node "$WATCHER" </dev/null >/tmp/earc-volume-overlay.stdout 2>&1 &
+# Prefer the native watcher for this CPU; fall back to the Node.js watcher.
+case "$(uname -m)" in
+	aarch64|arm64) BIN="$RUNTIME/earc-watcher-aarch64" ;;
+	*) BIN="$RUNTIME/earc-watcher-armv7" ;;
+esac
+[ -f "$BIN" ] && chmod 755 "$BIN" 2>/dev/null
+if [ -x "$BIN" ] && "$BIN" --version >/dev/null 2>&1; then
+	"$BIN" </dev/null >/tmp/earc-volume-overlay.stdout 2>&1 &
+elif [ -f "$RUNTIME/watcher.js" ]; then
+	/usr/bin/node "$RUNTIME/watcher.js" </dev/null >/tmp/earc-volume-overlay.stdout 2>&1 &
+else
+	exit 1
+fi
 echo $! > "$PIDFILE"
 exit 0

@@ -18,6 +18,8 @@ ssh_tv 'for PIDFILE in /tmp/earc-volume-overlay.pid /var/lib/earc-volume-overlay
 	done
 rm -f /tmp/earc-volume-overlay.pid /var/lib/webosbrew/init.d/91-earc-volume-overlay
 rm -rf /var/lib/earc-volume-overlay
+rm -f /var/lib/earc-volume-overlay-sonos/settings.json
+rmdir /var/lib/earc-volume-overlay-sonos 2>/dev/null || true
 luna-send -n 1 luna://com.webos.appInstallService/dev/remove '"'"'{"id":"com.github.nikolay1243.earcvolume"}'"'"' >/dev/null 2>&1 || true
 echo "eARC Volume Overlay removed"'
 

@@ -3,10 +3,18 @@
 var spawn = require('child_process').spawn;
 var execFile = require('child_process').execFile;
 var fs = require('fs');
-
+var sonos = require('./sonos-settings');
 var APP_ID = 'com.github.nikolay1243.earcvolume';
 var LOG = '/tmp/earc-volume-overlay.log';
 var DEBUG = process.env && process.env.EARC_VOLUME_DEBUG === '1';
+var sonosHost = null;
+var halfScale = false;
+var sonosMute = false;
+var settingsReady = false;
+var settingsError = null;
+var sourceVersion = 0;
+var readVersion = 0;
+var refreshOnRead = false;
 var last = null;
 var master = null;
 var arcVolume = null;
@@ -39,14 +47,12 @@ function flush() {
   var status = queued;
   queued = null;
   launching = true;
-  var payload = JSON.stringify({
-    id: APP_ID,
-    params: {
-      volume: status.volume,
-      mute: status.muteStatus,
-      output: 'external_arc'
-    }
-  });
+  var params = { volume: status.volume, mute: status.muteStatus, output: 'external_arc' };
+  if (halfScale) {
+    params.volumePercent = status.volume;
+    params.volume = Math.round(status.volume / 2);
+  }
+  var payload = JSON.stringify({ id: APP_ID, params: params });
   var started = Date.now();
   debug('launch requested for ' + status.volume);
   execFile('/usr/bin/luna-send', [
@@ -67,13 +73,15 @@ function update(activity) {
   }
   // EIM tracks received HDMI-CEC Report Audio Status messages. The master
   // volume can drift during held buttons and even ignore the soundbar remote.
-  var volume = arcVolume === null ? master.volume : arcVolume;
+  if (!settingsReady) return;
+  var volume = arcVolume === null && !sonosHost ? master.volume : arcVolume;
   if (typeof volume !== 'number' || !isFinite(volume) || volume < 0 || volume > 100) return;
-  var status = { volume: volume, muteStatus: !!master.muteStatus };
+  var status = { volume: volume, muteStatus: sonosHost ? sonosMute : !!master.muteStatus };
   var current = String(volume) + ':' + String(status.muteStatus);
   if (last === null) {
     last = current;
     log('watching external_arc at ' + current);
+    if (sonosHost && activity) show(status);
     return;
   }
   if (current === last) {
@@ -83,7 +91,7 @@ function update(activity) {
     return;
   }
   last = current;
-  debug('changed to ' + current + (arcVolume === null ? ' (master fallback)' : ' (ARC reported)'));
+  debug('changed to ' + current);
   show(status);
 }
 
@@ -91,56 +99,132 @@ function processResponse(response) {
   var status = response && response.volumeStatus;
   if (!status) return;
   var activity = master && (master.volume !== status.volume || master.muteStatus !== status.muteStatus);
+  var enteringArc = !master || master.soundOutput !== 'external_arc';
+  if (master && master.soundOutput !== status.soundOutput) readVersion++;
   master = status;
+  if (sonosHost) {
+    var keyUp = status.cause === 'volumeUp';
+    var keyDown = status.cause === 'volumeDown';
+    var key = keyUp || keyDown;
+    if (status.soundOutput !== 'external_arc') {
+      arcVolume = null;
+      refreshOnRead = false;
+      update();
+    } else if (enteringArc || activity || key) {
+      if (!enteringArc && (activity || key)) {
+        // Wait for the speaker before showing the scaled number after a key.
+        // At either limit a confirmed, unchanged reading still merits a display.
+        var atLimit = (keyUp && arcVolume === 100) || (keyDown && arcVolume === 0);
+        refreshOnRead = !halfScale || !key || atLimit;
+      }
+      wakeArcPoll(key);
+    }
+    return;
+  }
   if (activity) wakeArcPoll();
   update(activity);
 }
 
-function processArcResponse(response) {
+function processArcResponse(response, activity) {
   var volume = response && response.Volume;
   // CEC's unknown-volume value (127) must never become an on-screen number.
   if (typeof volume !== 'number' || !isFinite(volume) || volume < 0 || volume > 100) return;
-  if (arcVolume === null) log('using ARC-reported volume');
+  if (arcVolume === null) log(sonosHost ? 'using Sonos volume' : 'using ARC-reported volume');
   arcVolume = volume;
-  update();
+  update(activity);
 }
 
-// EIM's subscription can omit low-volume updates even though its getter is
-// current. Read the getter directly; each invocation needs a PTY on these TVs.
+// Settings are a small, atomically replaced JSON file. Keep the previous valid
+// source on a read error, and discard outstanding reads from any former room.
+function refreshSettings() {
+  var settings;
+  try {
+    settings = sonos.getSettings();
+    settingsError = null;
+  } catch (e) {
+    if (settingsError !== e.message) log('volume settings unavailable: ' + e.message);
+    settingsError = e.message;
+    return;
+  }
+  var host = settings.source === 'sonos' ? settings.host : null;
+  var nextHalfScale = Boolean(host && settings.displayMax === 50);
+  if (settingsReady && host === sonosHost && halfScale === nextHalfScale) return;
+  settingsReady = true;
+  sonosHost = host;
+  halfScale = nextHalfScale;
+  sourceVersion++;
+  readVersion++;
+  arcVolume = null;
+  sonosMute = false;
+  last = null;
+  queued = null;
+  refreshOnRead = false;
+  pollFailed = false;
+  activeUntil = 0;
+  log(sonosHost ? 'source selected: Sonos' : 'source selected: webOS');
+  if (!sonosHost) watchCECKeys(sourceVersion);
+  if (master && master.soundOutput === 'external_arc') wakeArcPoll();
+}
+
+function checkSettings() {
+  if (stopping) return;
+  refreshSettings();
+  setTimeout(checkSettings, 1000);
+}
+
+function readWebOsVolume(callback) {
+  var command = "/usr/bin/luna-send -n 1 'luna://com.webos.service.eim/getArcVolume' '{}'";
+  execFile('/usr/bin/script', ['-q', '-c', command, '/dev/null'], { timeout: 1500 }, function (error, stdout) {
+    if (error) return callback(error);
+    var match = String(stdout).match(/\{[^]*\}/);
+    var volume;
+    try { volume = match && JSON.parse(match[0]).Volume; } catch (e) { return callback(e); }
+    if (typeof volume !== 'number' || volume < 0 || volume > 100) return callback(new Error('ARC volume unavailable'));
+    callback(null, { volume: volume });
+  });
+}
+
 function pollArc() {
   pollTimer = null;
   if (stopping || polling) return;
-  if (!master || master.soundOutput !== 'external_arc') {
+  if (!settingsReady || !master || master.soundOutput !== 'external_arc') {
     pollTimer = setTimeout(pollArc, 1000);
     return;
   }
   polling = true;
   var previous = arcVolume;
-  var command = "/usr/bin/luna-send -n 1 'luna://com.webos.service.eim/getArcVolume' '{}'";
-  execFile('/usr/bin/script', ['-q', '-c', command, '/dev/null'], { timeout: 1500 }, function (error, stdout) {
+  var version = readVersion;
+  function received(error, status) {
     polling = false;
     if (stopping) return;
-    try {
-      if (error) throw error;
-      var match = String(stdout).match(/\{[^]*\}/);
-      if (!match) throw new Error('missing ARC response');
-      var response = JSON.parse(match[0]);
-      if (typeof response.Volume !== 'number' || response.Volume < 0 || response.Volume > 100) throw new Error('ARC volume unavailable');
-      processArcResponse(response);
+    if (readVersion !== version) {
+      pollTimer = setTimeout(pollArc, 0);
+      return;
+    }
+    if (error) {
+      if (!pollFailed) log((sonosHost ? 'Sonos' : 'ARC') + ' getter failed: ' + error.message);
+      pollFailed = true;
+      if (sonosHost) {
+        arcVolume = null;
+        queued = null;
+      }
+    } else if (master && master.soundOutput === 'external_arc') {
+      if (sonosHost) sonosMute = status.mute;
+      processArcResponse({ Volume: status.volume }, refreshOnRead);
       if (arcVolume !== previous) activeUntil = Date.now() + 2500;
       pollFailed = false;
-    } catch (e) {
-      if (!pollFailed) log('ARC getter failed: ' + e.message);
-      pollFailed = true;
     }
-    pollTimer = setTimeout(pollArc, Date.now() < activeUntil ? 150 : 1000);
-  });
+    refreshOnRead = false;
+    pollTimer = setTimeout(pollArc, !pollFailed && Date.now() < activeUntil ? 150 : 1000);
+  }
+  if (sonosHost) sonos.getStatus(sonosHost, received);
+  else readWebOsVolume(received);
 }
 
-function wakeArcPoll() {
+function wakeArcPoll(immediate) {
   var idle = Date.now() >= activeUntil;
   activeUntil = Date.now() + 2500;
-  if (idle && !polling) {
+  if ((idle || immediate) && !polling) {
     if (pollTimer) clearTimeout(pollTimer);
     pollArc();
   }
@@ -172,6 +256,9 @@ function subscribe(method, receive) {
   watcher.stderr.on('data', function (chunk) { log(method + ': ' + String(chunk).trim()); });
   watcher.on('error', function (error) { log(method + ': ' + error.message); });
   watcher.on('exit', function (code) {
+    master = null;
+    update();
+    readVersion++;
     watchers = watchers.filter(function (item) { return item !== watcher; });
     if (!stopping) {
       log(method + ' exited (' + code + '), restarting');
@@ -182,7 +269,7 @@ function subscribe(method, receive) {
 
 function processCECLine(line) {
   var key = /\bTX0544(41|42)\b/i.exec(line);
-  if (!key || !master || master.soundOutput !== 'external_arc') return;
+  if (sonosHost || !key || !master || master.soundOutput !== 'external_arc') return;
   wakeArcPoll();
   var atLimit = (key[1] === '41' && arcVolume === 100) ||
     (key[1] === '42' && arcVolume === 0);
@@ -194,7 +281,7 @@ function processCECLine(line) {
 
 // Observe existing CEC logs only. No key interception or injected commands.
 // Follow truncation/rotation and skip old entries when the watcher starts.
-function watchCECKeys() {
+function watchCECKeys(version) {
   var path = '/var/log/cecmessages';
   var position, inode, pending = '';
   try {
@@ -206,7 +293,7 @@ function watchCECKeys() {
     return;
   }
   function read() {
-    if (stopping) return;
+    if (stopping || version !== sourceVersion) return;
     var fd;
     try {
       fd = fs.openSync(path, 'r');
@@ -239,8 +326,7 @@ function stop() {
 
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
-log('service starting (ARC-reported volume preferred; master fallback until available)');
+log('service starting (configurable volume source)');
+checkSettings();
 subscribe('com.webos.service.audio/master/getVolume', processResponse);
-pollArc();
-
-watchCECKeys();
+if (!polling && !pollTimer) pollArc();

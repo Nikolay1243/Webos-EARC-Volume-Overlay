@@ -5,7 +5,7 @@
   "description": "An on-screen eARC volume indicator for rooted LG webOS TVs",
   "license": "MIT",
   "scripts": {
-    "test": "node scripts/test-root-exec.cjs && node scripts/test-watcher.cjs && node scripts/test-overlay.cjs",
+    "test": "node scripts/test-root-exec.cjs && node scripts/test-watcher.cjs && node scripts/test-sonos-settings.cjs && node scripts/test-overlay.cjs",
     "package": "sh scripts/package.sh",
     "release": "sh scripts/make-release.sh"
   },

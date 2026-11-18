@@ -12,7 +12,7 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT INT TERM
 cp -R app/. "$STAGE/"
 mkdir -p "$STAGE/runtime"
-cp runtime/watcher.js runtime/91-earc-volume-overlay "$STAGE/runtime/"
+cp runtime/watcher.js runtime/sonos-settings.js runtime/91-earc-volume-overlay "$STAGE/runtime/"
 npx ares-package "$STAGE" --no-minify -o build
 
 IPK="build/com.github.nikolay1243.earcvolume_${VERSION}_all.ipk"

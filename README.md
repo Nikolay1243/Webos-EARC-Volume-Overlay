@@ -18,6 +18,7 @@ background. The number shows the reported level; the bar animates between update
 
 - Reads soundbar-reported ARC volume from `com.webos.service.eim/getArcVolume`,
   with sound output and mute changes from `com.webos.service.audio`
+- Can read volume and mute directly from a Sonos room on the local network
 - Activates only while the current sound output is `external_arc`
 - Updates the existing overlay instead of opening duplicate windows
 - Re-shows 0/100 on limit presses when the TV exposes volume commands in
@@ -35,12 +36,13 @@ background. The number shows the reported level; the bar animates between update
 - A rooted LG webOS TV
 - Homebrew Channel installed
 - `/usr/bin/node`, `/usr/bin/luna-send`, and `/usr/bin/script` on the TV
-- An ARC/eARC device that reports a numeric volume through webOS
+- An ARC/eARC device that reports a numeric volume through webOS, or a Sonos
+  soundbar reachable from the TV over the local network
 
 Not every HDMI-CEC receiver reports an absolute volume. If webOS only receives
 volume-up/down acknowledgements, this project cannot infer the real number.
-On firmware without the ARC volume interface, the watcher falls back to webOS's
-master volume. That value can drift from the soundbar during held volume buttons;
+With the default webOS source, the watcher falls back to master volume if the
+firmware lacks the ARC volume interface. That value can drift from the soundbar during held volume buttons;
 it is a compatibility fallback, not a confirmed soundbar reading.
 
 ## Install from Homebrew Channel
@@ -63,6 +65,20 @@ Install the single overlay IPK. Open **eARC Volume Overlay** from the launcher
 for its Enable, Disable, and Test menu. The same app switches to a transparent
 overlay when launched by its background watcher. Volume events leave an open
 settings menu in place. Use **Disable** before uninstalling.
+
+### Sonos soundbars
+
+Open the overlay settings, select **Sonos** and choose **Find Sonos rooms**.
+Select the soundbar connected to the TV, or enter its private IPv4 address
+if discovery is unavailable. Use **Check volume** to verify the room, then
+**Save source**. The TV needs to reach the speaker on TCP port 1400. Automatic
+discovery also uses SSDP multicast.
+
+The default Sonos scale shows the same number as the Sonos app. If a single
+press changes your soundbar by two, select the 0–50 scale. Sonos levels
+8, 10 and 12 then appear as 4, 5 and 6 on the TV. Odd levels round up,
+so a soundbar at 1 still shows 1. The bar always shows the actual percentage.
+Both scales use the soundbar's mute state and leave volume control to the remote.
 
 ### Upgrading from v1.3.0 or earlier
 
@@ -144,7 +160,8 @@ tail -f /tmp/earc-volume-overlay.log
 A healthy startup looks similar to:
 
 ```text
-service starting (ARC-reported volume preferred; master fallback until available)
+service starting (configurable volume source)
+source selected: webOS
 watching external_arc at 12:false
 using ARC-reported volume
 ```
@@ -169,7 +186,7 @@ setup screen instead.
 
 ### Volume steps
 
-The displayed number is the ARC/eARC device's reported level, not a count of
+With the default scale, the displayed number is the ARC/eARC device's reported level, not a count of
 remote presses. On the tested soundbar, reported levels step by one at low
 volumes and make larger jumps higher up (for example, 23 → 27 → 31 → 34).
 Other devices may use different scales. This is device-dependent, not a universal
@@ -185,9 +202,14 @@ output switching.
 
 Results can vary by firmware and audio device. The original reporter's Samsung
 HW-M550 has not yet been verified with these changes. Actual volume reporting
-requires the ARC getter and soundbar feedback; limit-press refreshes additionally
+over HDMI requires the ARC getter and soundbar feedback; limit-press refreshes additionally
 require `/var/log/cecmessages`. The app does not send volume commands or assume
 that every rapid remote press was accepted by the soundbar.
+
+On an LG CX running webOS 5.6.2 with a Sonos Arc Ultra, the ARC getter was
+unavailable. With the Sonos source selected, two quick presses down and two up
+changed the speaker from 9 to 7, 5, 7 and 9. The 0–50 display showed 5, 4, 3,
+4 and 5.
 
 ## Releases
 
